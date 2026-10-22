@@ -53,13 +53,13 @@ public actor OfflinePlaceResolver {
             guard !city.isEmpty || !country.isEmpty else { throw RestoreError(.invalidInput,"Enter a city or country for a manual place.") }
             return [.init(city:city,region:correction.region,country:country,countryCode:correction.countryCode,origin:.manual)]
         }
-        let position=try Coordinates.read(document)
+        let position=try MetadataCoordinates.read(document)
         return try await lookup(.init(latitude:position.0,longitude:position.1,maxDistanceKM:queryDefaults.maxDistanceKM,limit:queryDefaults.limit))
     }
 }
 
-private enum Coordinates {
-    static func read(_ document:MetadataDocument) throws -> (Double,Double) {
+public enum MetadataCoordinates {
+    public static func read(_ document:MetadataDocument) throws -> (Double,Double) {
         var pairs=[(Double,Double)]()
         for group in ["GPS","Composite","XMP-exif"] {
             let latValue=document.tags[group+":GPSLatitude"],lonValue=document.tags[group+":GPSLongitude"]

@@ -12,18 +12,20 @@ public struct NameTemplate:Codable,Equatable,Sendable {
         var fields:Set<String> { Set(parts.compactMap {if case .field(let key)=$0 {return key};return nil}) }
         func render(item:InspectedItem,place:PlaceMatch?,sequence:Int,limit:Int) throws -> (String,Bool) {
             var values=["country":place?.country ?? "","city":place?.city ?? "","original":item.snapshot.url.deletingPathExtension().lastPathComponent,"extension":item.snapshot.url.pathExtension,"sequence":String(format:"%0*d",width ?? 1,sequence)]
-            if fields.contains("city") || fields.contains("country") {
-                guard let place,!place.city.isEmpty,!place.country.isEmpty else { throw RestoreError(.missingMetadata,"Choose a place before using country/city in the filename.") }
-            }
             for key in ["country","city","original","extension"] { values[key]=Self.sanitize(values[key] ?? "") }
+            for key in ["country","city"] where fields.contains(key) {
+                guard !(values[key] ?? "").isEmpty else {throw RestoreError(.missingMetadata,"Choose a \(key) before using it in the filename.")}
+            }
             guard !(values["extension"] ?? "").isEmpty else { throw RestoreError(.unsupported,"A metadata rename requires a file extension.") }
             func output()->String { parts.map { switch $0 {case .literal(let s):return s;case .field(let k):return values[k] ?? ""} }.joined() }
             let full=output();var rendered=full
-            let mutable=fields.intersection(["country","city","original"])
+            let mutable=["country","city","original"].filter {fields.contains($0)}
             for key in mutable { values[key]=Self.prefix(values[key]!,bytes:limit) }
             rendered=output()
             while rendered.utf8.count>limit {
-                guard let key=mutable.max(by:{values[$0]!.utf8.count < values[$1]!.utf8.count}),!values[key]!.isEmpty else { throw RestoreError(.unsupported,"The sequence, extension and template exceed the volume filename limit.") }
+                var longest:String?
+                for key in mutable where longest==nil || values[key]!.utf8.count>values[longest!]!.utf8.count {longest=key}
+                guard let key=longest,!values[key]!.isEmpty else { throw RestoreError(.unsupported,"The sequence, extension and template exceed the volume filename limit.") }
                 let budget=max(0,values[key]!.utf8.count-(rendered.utf8.count-limit))
                 values[key]=Self.prefix(values[key]!,bytes:budget);rendered=output()
             }

@@ -2,6 +2,7 @@ import Foundation
 
 public struct DiscoveryOptions: Sendable {
     public var recursive = false
+    public var enumerateRootContents = false
     public var includeFiles = true
     public var includeFolders = true
     public var includeHidden = false
@@ -36,11 +37,12 @@ public struct SourceInventory {
             do {
                 let snapshot=try reader.snapshot(at:url)
                 guard ![FileKind.symlink,.package,.unavailable].contains(snapshot.kind) else { excluded.append(.init(url:url,reason:"\(snapshot.kind.rawValue) items are not traversed."));return }
+                if snapshot.kind == .directory && url.lastPathComponent.hasPrefix(".RestoreGPSTime-") {excluded.append(.init(url:url,reason:"Private transaction directories cannot be inputs."));return}
                 guard seen.insert(snapshot.id.physicalKey).inserted else { excluded.append(.init(url:url,reason:"Duplicate physical file."));return }
                 if snapshot.kind == .regular && options.includeFiles { snapshots.append(snapshot) }
                 if snapshot.kind == .directory {
                     if options.includeFolders { snapshots.append(snapshot) }
-                    if options.recursive {
+                    if options.recursive || explicitlySelected && options.enumerateRootContents {
                         for child in try FileManager.default.contentsOfDirectory(at:url,includingPropertiesForKeys:nil).sorted(by:{$0.path<$1.path}) { visit(child,explicitlySelected:false) }
                     }
                 }

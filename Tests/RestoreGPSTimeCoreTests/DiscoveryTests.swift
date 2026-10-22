@@ -3,6 +3,22 @@ import Darwin
 @testable import RestoreGPSTimeCore
 
 final class DiscoveryTests: CoreTestCase {
+    func testExplicitRootContentsWithoutSubfolderRecursion() async throws {
+        let nested=workspace.appendingPathComponent("nested");try FileManager.default.createDirectory(at:nested,withIntermediateDirectories:false)
+        try Data("root".utf8).write(to:workspace.appendingPathComponent("one.jpg"));try Data("nested".utf8).write(to:nested.appendingPathComponent("two.jpg"))
+        var options=DiscoveryOptions();options.includeFolders=false;options.enumerateRootContents=true
+        let result=await SourceInventory().scan(urls:[workspace],options:options)
+        XCTAssertEqual(result.snapshots.map {$0.url.lastPathComponent},["one.jpg"])
+        options.recursive=true;let recursive=await SourceInventory().scan(urls:[workspace],options:options)
+        XCTAssertEqual(Set(recursive.snapshots.map {$0.url.lastPathComponent}),["one.jpg","two.jpg"])
+    }
+    func testPrivateTransactionDirectoryNeverBecomesInput() async throws {
+        let privateRoot=workspace.appendingPathComponent(".RestoreGPSTime-owned-evidence");try FileManager.default.createDirectory(at:privateRoot,withIntermediateDirectories:false)
+        try Data("retained original".utf8).write(to:privateRoot.appendingPathComponent("old.jpg"))
+        var options=DiscoveryOptions();options.recursive=true;options.includeFolders=false;options.includeHidden=true
+        let result=await SourceInventory().scan(urls:[privateRoot],options:options)
+        XCTAssertTrue(result.snapshots.isEmpty);XCTAssertEqual(result.excluded.count,1)
+    }
     func testSymlinkHardlinkPackageAndPlaceholderRules() async throws {
         let file = workspace.appendingPathComponent("original.jpg")
         try Data("test-data".utf8).write(to:file)

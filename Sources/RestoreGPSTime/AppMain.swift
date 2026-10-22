@@ -2,25 +2,32 @@ import SwiftUI
 import RestoreGPSTimeCore
 
 @main
-struct RestoreGPSTimeApp: App {
-    @State private var runtimeStatus = "Checking bundled metadata runtime…"
-    var body: some Scene {
+struct RestoreGPSTimeApp:App {
+    @StateObject private var session=AppSession()
+    var body:some Scene {
         WindowGroup("RestoreGPSTime") {
-            VStack(spacing: 18) {
-                Image(systemName: "clock.arrow.circlepath").font(.system(size: 48)).foregroundStyle(.blue)
-                Text("RestoreGPSTime").font(.largeTitle.bold())
-                Text("Photo and video dates. Place names. Your files, restored.").foregroundStyle(.secondary)
-                Text(runtimeStatus).font(.callout).textSelection(.enabled)
-                Text("Development build • File processing is not available in this foundation build.").font(.caption).foregroundStyle(.secondary)
+            Group {
+                if let model=session.model {WorkspaceView(session:session,model:model)}
+                else {
+                    VStack(spacing:18) {
+                        Image(systemName:"clock.arrow.circlepath").font(.system(size:48)).foregroundStyle(.blue)
+                        Text("RestoreGPSTime").font(.largeTitle.bold())
+                        Text("Photo and video dates. Place names. Your files, restored.").foregroundStyle(.secondary)
+                        if let issue=session.runtimeIssue {
+                            Text("The bundled metadata runtime is unavailable.").font(.headline)
+                            Text(issue).textSelection(.enabled).frame(maxWidth:640)
+                            Button("Retry Runtime Check") {Task {await session.start()}}
+                        } else {ProgressView();Text(session.runtimeDescription)}
+                    }.padding(40).frame(maxWidth:.infinity,maxHeight:.infinity)
+                }
             }
-            .frame(minWidth: 720, minHeight: 420)
-            .padding(40)
-            .task {
-                do {
-                    let identity = try await RuntimeProbe().inspect(paths: RuntimeLocator().locate(in: Bundle.main.bundleURL))
-                    runtimeStatus = "ExifTool \(identity.exifToolVersion) • Offline place database ready"
-                } catch { runtimeStatus = error.localizedDescription }
-            }
-        }
+            .frame(minWidth:1100,minHeight:720)
+            .preferredColorScheme(session.appearance)
+            .task {await session.start()}
+            .onOpenURL {url in Task {await session.open(url)}}
+            .sheet(item:$session.finderTool) {tool in FinderToolSheet(session:session,tool:tool)}
+            .alert("Tools",isPresented:Binding(get:{session.toolResult != nil},set:{if !$0 {session.toolResult=nil}})) {Button("OK") {session.toolResult=nil}} message:{Text(session.toolResult ?? "")}
+        }.defaultSize(width:1280,height:820)
+        .commands {ToolsCommands(session:session)}
     }
 }

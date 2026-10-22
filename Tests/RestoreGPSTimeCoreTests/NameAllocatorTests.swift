@@ -2,6 +2,19 @@ import XCTest
 @testable import RestoreGPSTimeCore
 
 final class NameAllocatorTests:NamingTestCase {
+    func testCountryOnlyAndCityOnlyTemplatesNeedOnlySelectedPlaceFields() throws {
+        for (place,pattern,expected) in [(PlaceMatch(city:"",country:"France"),"{country}-{sequence:04}.{extension}","France-0001.HEIC"),(PlaceMatch(city:"Paris",country:""),"{city}-{sequence:04}.{extension}","Paris-0001.HEIC")] {
+            let names=try NameAllocator().reserve(groups:AssetGrouper().group(items:[item("input.HEIC",place:place)]),destinations:destination(),template:.init(pattern))
+            XCTAssertNil(names.first?.blockingReason);XCTAssertEqual(names.first?.finalURL.lastPathComponent,expected)
+        }
+    }
+    func testEqualLengthTruncationUsesStableFieldPriority() throws {
+        let place=PlaceMatch(city:"DDDD",country:"CCCC"),input=try item("a.HEIC",place:place)
+        for _ in 0..<12 {
+            let names=try NameAllocator().reserve(groups:AssetGrouper().group(items:[input]),destinations:destination(rules:.init(maxNameBytes:18)),template:.init("{country}-{city}-{sequence:04}.{extension}"))
+            XCTAssertEqual(names.first?.finalURL.lastPathComponent,"CCC-DDDD-0001.HEIC")
+        }
+    }
     func testSamePlaceIncrementsByStableOrder() throws {
         let groups=try AssetGrouper().group(items:[item("b.MOV",family:.video),item("a.HEIC")])
         let context=try destination()

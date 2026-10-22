@@ -11,7 +11,8 @@ let package = Package(
     targets: [
         .target(name: "RestoreGPSTimeCore", resources:[.process("Resources")]),
         .executableTarget(name: "RestoreGPSTime", dependencies: ["RestoreGPSTimeCore"]),
-        .testTarget(name: "RestoreGPSTimeCoreTests", dependencies: ["RestoreGPSTimeCore"])
+        .testTarget(name: "RestoreGPSTimeCoreTests", dependencies: ["RestoreGPSTimeCore"]),
+        .testTarget(name: "RestoreGPSTimeAppTests", dependencies: ["RestoreGPSTime", "RestoreGPSTimeCore"])
     ],
     swiftLanguageVersions: [.v5]
 )

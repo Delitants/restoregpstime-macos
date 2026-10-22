@@ -52,7 +52,7 @@ public actor MetadataMutationDriver:MutationDriver {
         guard try FileIdentityReader().snapshot(at:archive).xattrHashes==snapshot.xattrHashes else {throw RestoreError(.verificationFailed,"Recovery stage extended attributes differ from the retained original.")}
         try SecureFS.applyMetadata(snapshot,from:archive,to:try SecureFS.canonical(stage))
     }
-    static func expandedTags(_ mutation:MutationPlan,document:MetadataDocument) throws -> [TagMutation] {
+    public static func expandedTags(_ mutation:MutationPlan,document:MetadataDocument) throws -> [TagMutation] {
         var tags=mutation.tags
         if mutation.removeGPS {
             guard !tags.contains(where:{if case .set(let id,_)=$0 {return MetadataStripProfiles.looksLikeLocation(id.rawValue)};return false}) else {throw RestoreError(.invalidInput,"Location removal cannot also add location fields.")}

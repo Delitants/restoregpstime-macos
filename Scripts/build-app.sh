@@ -25,6 +25,7 @@ if [ -e "$app" ]; then echo "Output exists: $app. Choose a new output directory;
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers" "$app/Contents/PlugIns/PerlModules" "$app/Contents/Resources/PerlRuntime" "$app/Contents/Resources/ExifTool" "$app/Contents/Resources/Notices"
 cp "$bin_path/RestoreGPSTime" "$app/Contents/MacOS/RestoreGPSTime"
 cp "$repo_root/App/Info.plist" "$app/Contents/Info.plist"
+cp "$repo_root/App/Resources/AppIcon.icns" "$app/Contents/Resources/"
 cp "$repo_root/work/runtime-install/$arch-macos13/bin/perl" "$app/Contents/Helpers/perl"
 cp -R "$repo_root/work/runtime-install/$arch-macos13/lib" "$app/Contents/Resources/PerlRuntime/"
 python3 - "$app" <<'PY'
