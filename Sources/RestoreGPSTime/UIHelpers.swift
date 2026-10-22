@@ -17,9 +17,11 @@ import RestoreGPSTimeCore
         return await panel.begin() == .OK ? panel.url:nil
     }
 }
-func displayDate(_ date:Date?)->String {
+func displayDate(_ date:Date?,locale:Locale = .current,timeZone:TimeZone = .current)->String {
     guard let date else {return "—"}
-    return date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.omitted)).minute(.twoDigits).second(.twoDigits).timeZone(.iso8601(.short)))
+    var style=Date.FormatStyle.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM:.abbreviated)).minute(.twoDigits).second(.twoDigits).timeZone(.iso8601(.short))
+    style.locale=locale;style.timeZone=timeZone
+    return date.formatted(style)
 }
 extension Binding where Value == DatePolicy? {
     func field<T>(_ key:WritableKeyPath<DatePolicy,T>,default defaultValue:T)->Binding<T> {
