@@ -1,6 +1,6 @@
 # Workflow, droplet, and Finder integration acceptance
 
-Implemented data paths are independently tested. Native Finder/Services/drop/launch acceptance is pending a Mac unlock and the required native host matrix.
+Implemented data paths are independently tested. The unlocked ARM64/macOS 27 native workflow export/reload smoke check passed; Finder/Services/drop/launch acceptance and the required native host matrix remain open.
 
 ## Workflow format
 
@@ -22,8 +22,9 @@ The Add Files panel, native drop target, document Open With, Services provider, 
 
 `WorkflowTests`, `DropletTests`, and `ImportTests` cover schema/path privacy, malicious nested keys, private handoff bounds, relocation of exported bundle resources, unique identities, local signature verification, rejected existing exports, required destinations, invalid-document atomicity, shared Service routing, and overlapping imports with zero executor calls. Export assembly tests use an inert native executable and are **not** actual Finder/drop acceptance.
 
-## Native OS checklist — all pending
+## Native OS checklist — partial
 
+- Native Save Workflow and Open Workflow passed on source `9aa5cde`: portable fields only, Save Copies reset, destinations cleared, Apply disabled until a new valid preview. This is not droplet or Finder acceptance.
 - Main app Open With and relaunch with several selected photos/videos/folders.
 - Finder Service registration in a disposable candidate installation; selection arrives once with correct paths.
 - Native drag/drop and overlapping Open With calls.
