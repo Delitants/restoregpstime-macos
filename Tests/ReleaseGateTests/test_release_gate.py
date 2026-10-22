@@ -4,15 +4,23 @@ gate=importlib.util.module_from_spec(spec);spec.loader.exec_module(gate)
 SHA='a'*40
 
 def valid(arch='arm64'):
-    return {'schema':1,'application':'RestoreGPSTime','version':'1.0.0','architecture':arch,'minimumOS':'13.0','currentOSMajor':27,'sourceCommit':SHA,'reviewedSourceCommit':SHA,'peerSourceCommit':SHA,'tag':f'v1.0.0-{arch}',
+    return {'schema':1,'application':'RestoreGPSTime','version':'1.0.0','architecture':arch,'minimumOS':'13.0','currentOSMajorByArchitecture':{'arm64':27,'x86_64':26},'sourceCommit':SHA,'reviewedSourceCommit':SHA,'peerSourceCommit':SHA,'tag':f'v1.0.0-{arch}',
       'appHash':'b'*64,'dependencyIdentity':{'engineHash':'d'*64,'databaseHash':'e'*64,'capabilityHash':'f'*64},'signing':{'developerID':True,'hardenedRuntime':True,'notarization':'Accepted','stapled':True,'teamID':'ABCDEFGHIJ'},
       'privacy':{'audited':True,'privateMaterial':False,'secretFound':False},'gates':{g:'pass' for g in gate.REQUIRED_GATES},
-      'hosts':[{'architecture':a,'hardwareARM':a=='arm64','translated':False,'osMajor':o,'current':o==27,'status':'pass','sourceCommit':SHA,'appHash':'b'*64,'dependencyIdentity':{'engineHash':'d'*64,'databaseHash':'e'*64,'capabilityHash':'f'*64}} for a in ['arm64','x86_64'] for o in [13,27]],
+      'hosts':[{'architecture':a,'hardwareARM':a=='arm64','translated':False,'osMajor':o,'current':o==gate.CURRENT_OS_MAJOR_BY_ARCH[a],'status':'pass','sourceCommit':SHA,'appHash':'b'*64,'dependencyIdentity':{'engineHash':'d'*64,'databaseHash':'e'*64,'capabilityHash':'f'*64}} for a in ['arm64','x86_64'] for o in [13,gate.CURRENT_OS_MAJOR_BY_ARCH[a]]],
       'binaries':[{'path':'Contents/MacOS/RestoreGPSTime','architectures':[arch],'minimumOS':'13.0','platform':'macOS','dependencies':['/usr/lib/libSystem.B.dylib']}],
       'assets':[{'name':f'RestoreGPSTime-1.0.0-{"AppleSilicon" if arch=="arm64" else "Intel"}.{ext}','sha256':'c'*64} for ext in ['zip','dmg']]+[{'name':name,'sha256':'c'*64} for name in sorted(gate.COMMON_ASSETS)]}
 
 class ReleaseGateTests(unittest.TestCase):
     def testCompleteSyntheticContract(self):self.assertEqual(gate.validate_manifest(valid()),[])
+    def testCurrentOSIsBoundToEachArchitecturesSupportedMacs(self):
+        m=valid();m['currentOSMajorByArchitecture']={'arm64':27,'x86_64':26}
+        for host in m['hosts']:
+            if host['architecture']=='x86_64' and host['current']:host['osMajor']=26
+        self.assertEqual(gate.validate_manifest(m),[])
+        for host in m['hosts']:
+            if host['architecture']=='x86_64' and host['current']:host['osMajor']=27
+        self.assertTrue(gate.validate_manifest(m))
     def testMissingGateBlocks(self):
         for name in gate.REQUIRED_GATES:
             m=valid();del m['gates'][name];self.assertTrue(gate.validate_manifest(m),name)

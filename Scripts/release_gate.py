@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fail-closed stable release contract. Never uploads or changes GitHub state."""
 import argparse,hashlib,json,pathlib,re,subprocess,sys
+CURRENT_OS_MAJOR_BY_ARCH={'arm64':27,'x86_64':26}
 REQUIRED_GATES=('baseline-regression','genuine-formats','large-video','volumes','native-ui','finder-services-droplets','finder-isolated-login','instruments-10000','relocated-offline','source-review')
 COMMON_ASSETS={'format-matrix.json','reference-actions.csv','reference-tools.csv','INSTALL.md','RECOVERY.md','KNOWN-LIMITS.md','THIRD-PARTY-NOTICES.txt','DEPENDENCY-LICENSES.zip','LICENSE.txt'}
 def sha256(path):
@@ -32,14 +33,15 @@ def validate_manifest(m):
     if not isinstance(gates,dict):gates={}
     for gate in REQUIRED_GATES:
         if gates.get(gate)!='pass':errors.append('Missing/failing gate: '+gate)
-    current=m.get('currentOSMajor')
-    if not isinstance(current,int) or current<=13:errors.append('Current supported OS major is not recorded')
+    current=m.get('currentOSMajorByArchitecture')
+    if current!=CURRENT_OS_MAJOR_BY_ARCH:errors.append('Current supported OS matrix must match each architecture')
+    if not isinstance(current,dict):current={}
     if not valid_hash(m.get('appHash'),64) or not valid_dependency(m.get('dependencyIdentity')):errors.append('Missing exact candidate application/dependency identity')
     hosts=m.get('hosts',[])
     if not isinstance(hosts,list):hosts=[]
     for cpu in ('arm64','x86_64'):
         for oldest in (True,False):
-            found=[h for h in hosts if isinstance(h,dict) and h.get('architecture')==cpu and h.get('hardwareARM') is (cpu=='arm64') and h.get('translated') is False and h.get('status')=='pass' and h.get('sourceCommit')==source and valid_hash(h.get('appHash'),64) and valid_dependency(h.get('dependencyIdentity')) and (h.get('architecture')!=arch or h.get('appHash')==m.get('appHash') and h.get('dependencyIdentity')==m.get('dependencyIdentity')) and (h.get('osMajor')==13 if oldest else h.get('current') is True and isinstance(h.get('osMajor'),int) and h['osMajor']==current)]
+            found=[h for h in hosts if isinstance(h,dict) and h.get('architecture')==cpu and h.get('hardwareARM') is (cpu=='arm64') and h.get('translated') is False and h.get('status')=='pass' and h.get('sourceCommit')==source and valid_hash(h.get('appHash'),64) and valid_dependency(h.get('dependencyIdentity')) and (h.get('architecture')!=arch or h.get('appHash')==m.get('appHash') and h.get('dependencyIdentity')==m.get('dependencyIdentity')) and (h.get('osMajor')==13 if oldest else h.get('current') is True and isinstance(h.get('osMajor'),int) and h['osMajor']==current.get(cpu))]
             if len(found)!=1:errors.append(f'Missing or ambiguous native {cpu} '+('macOS 13' if oldest else 'current OS')+' acceptance')
     binaries=m.get('binaries',[])
     if not isinstance(binaries,list) or not binaries:errors.append('No Mach-O inventory');binaries=[]
