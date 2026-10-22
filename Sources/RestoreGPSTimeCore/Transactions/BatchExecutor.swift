@@ -9,9 +9,10 @@ public struct RunOptions:Sendable {
 public actor BatchExecutor {
     let driver:any MutationDriver
     let validator:PlanValidator
+    let notifier:any FinderNotifying
     private var tasks=[UUID:Task<Void,Never>]()
     private var cancelled=Set<UUID>()
-    public init(driver:any MutationDriver,validator:PlanValidator) {self.driver=driver;self.validator=validator}
+    public init(driver:any MutationDriver,validator:PlanValidator,notifier:any FinderNotifying=FinderNotifier()) {self.driver=driver;self.validator=validator;self.notifier=notifier}
     public nonisolated func execute(_ plan:BatchPlan,options:RunOptions=RunOptions())->AsyncStream<BatchEvent> {
         AsyncStream {continuation in Task {await self.start(plan,options:options,continuation:continuation)}}
     }
@@ -26,12 +27,31 @@ public actor BatchExecutor {
         continuation.yield(.started(plan.id,totalGroups:plan.groups.count))
         let validation=await validator.revalidate(plan)
         if !validation.isValid {continuation.yield(.rejected(validation));results=plan.groups.map {.init(groupID:$0.id,status:.failed,errors:validation.conflicts.map {$0.error.detail})};continuation.yield(.finished(.init(plan:plan,startedAt:started,results:results,cancelled:Task.isCancelled)));return}
+        if plan.options.mode == .modifyInPlace,plan.request.isFinderNotificationOnly,plan.groups.allSatisfy({$0.items.allSatisfy {$0.mutation.isFinderNotificationOnly && $0.name.finalURL.standardizedFileURL.path==$0.source.snapshot.url.standardizedFileURL.path}}) {
+            for group in plan.groups {
+                let result:GroupResult
+                if group.eligibility != .eligible {result = .init(groupID:group.id,status:group.eligibility == .excluded ? .excluded:.blocked,errors:group.blockingReasons)}
+                else if Task.isCancelled {result = .init(groupID:group.id,status:.cancelled)}
+                else {
+                    do {
+                        try SourceRevalidator().validate(group)
+                        let urls=group.items.map {$0.source.snapshot.url}
+                        await notifier.notify(changed:urls)
+                        result = .init(groupID:group.id,status:.committed,outputs:urls)
+                    } catch {result = .init(groupID:group.id,status:.failed,errors:[error.localizedDescription])}
+                }
+                results.append(result);continuation.yield(.group(result))
+            }
+            continuation.yield(.finished(.init(plan:plan,startedAt:started,results:results,cancelled:Task.isCancelled)));return
+        }
         guard let root=plan.options.recoveryRoot else {
             results=plan.groups.map {.init(groupID:$0.id,status:.failed,errors:["Choose a recovery folder for retained transaction evidence."])}
             continuation.yield(.finished(.init(plan:plan,startedAt:started,results:results,cancelled:false)));return
         }
+        var activeJournal:RecoveryJournal?,interrupted=false
         do {
             let journal=try RecoveryJournal(root:root,batchID:plan.id,checkpoint:options.checkpoint)
+            activeJournal=journal
             // Descendants finish before selected directory attributes.
             var directoryOverrides=[String:SourceFingerprint](),ownedDirectories=[String:SourceID]()
             let groupOrder=Dictionary(uniqueKeysWithValues:plan.groups.enumerated().map {($0.element.id,$0.offset)})
@@ -48,6 +68,11 @@ public actor BatchExecutor {
                     try journal.persist(directoryRecord);try options.checkpoint(.persisted(.prepared))
                     try BackupStore().prepare(&directoryRecord,journal:journal,options:options)
                     directoryRecord.phase = .backedUp;try journal.persist(directoryRecord);try options.checkpoint(.persisted(.backedUp))
+                }
+                let directories=try journal.records().filter {$0.phase == .backedUp && $0.members.allSatisfy {$0.item.source.snapshot.kind == .directory}}.sorted {$0.members[0].item.source.snapshot.url.path.count<$1.members[0].item.source.snapshot.url.path.count}
+                for var record in directories {
+                    let updated=try DirectoryLockCoordinator().unlockPrepared(&record,journal:journal,options:options)
+                    directoryOverrides.merge(updated,uniquingKeysWith:{$1})
                 }
             }
             for group in groups {
@@ -73,6 +98,7 @@ public actor BatchExecutor {
                         let staged=StageResult(record:record,expectedSources:directoryOverrides,ownedDirectories:ownedDirectories)
                         result=try await Task.detached {try await Committer(options:options).commit(group:group,stages:staged,journal:journal)}.value
                     } catch is SimulatedInterruption {
+                        interrupted=true
                         result = .init(groupID:group.id,status:.recoveryNeeded,errors:["Injected process interruption; journal retained."],recoveryURL:journal.recordURL(groupID:group.id))
                     } catch {
                         let cancellation=error is CancellationError || (error as? RestoreError)?.code == .cancelled
@@ -95,9 +121,27 @@ public actor BatchExecutor {
                 }
                 if let updated=try? SourceRevalidator().refreshedDirectoryOverrides(plan:plan,journal:journal,previous:directoryOverrides) {directoryOverrides=updated}
                 for record in (try? journal.records()) ?? [] {ownedDirectories.merge(record.createdDirectories,uniquingKeysWith:{$1})}
+                if result.status == .committed,group.items.contains(where:{$0.mutation.finder.contains(.notify)}) {await notifier.notify(changed:result.outputs)}
                 results.append(result);continuation.yield(.group(result))
             }
-        } catch {results+=plan.groups.filter {group in !results.contains(where:{$0.groupID==group.id})}.map {.init(groupID:$0.id,status:.failed,errors:[error.localizedDescription])}}
+        } catch {
+            if error is SimulatedInterruption {interrupted=true}
+            results+=plan.groups.filter {group in !results.contains(where:{$0.groupID==group.id})}.map {.init(groupID:$0.id,status:interrupted ? .recoveryNeeded:.failed,errors:[error.localizedDescription])}
+        }
+        if let journal=activeJournal,!interrupted {
+            do {
+                let recoveryDriver=driver
+                let outcomes=try await Task.detached {try await DirectoryLockCoordinator().restoreUnfinished(journal:journal,driver:recoveryDriver)}.value
+                for (id,outcome) in outcomes where !outcome.isComplete {
+                    if let index=results.firstIndex(where:{$0.groupID==id}) {
+                        let old=results[index]
+                        results[index] = .init(groupID:id,status:.recoveryNeeded,outputs:old.outputs,errors:old.errors+outcome.conflicts,recoveryURL:journal.recordURL(groupID:id))
+                    }
+                }
+            } catch {
+                results=results.map {value in value.status == .committed ? value:.init(groupID:value.groupID,status:.recoveryNeeded,outputs:value.outputs,errors:value.errors+["Directory recovery requires attention: "+error.localizedDescription],recoveryURL:value.recoveryURL)}
+            }
+        }
         continuation.yield(.finished(.init(plan:plan,startedAt:started,results:results,cancelled:cancelled.contains(plan.id) || Task.isCancelled)))
     }
 }

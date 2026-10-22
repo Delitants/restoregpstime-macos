@@ -94,8 +94,8 @@ enum SecureFS {
     static func attributesEqual(_ a:FileSnapshot,_ b:FileSnapshot,flags:UInt32?=nil)->Bool {
         a.creationDate==b.creationDate && a.modificationDate==b.modificationDate && a.kind==b.kind && a.flags==(flags ?? b.flags) && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText
     }
-    static func stableDirectoryAttributes(_ a:FileSnapshot,_ b:FileSnapshot)->Bool {
-        a.kind==b.kind && a.flags==b.flags && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText
+    static func stableDirectoryAttributes(_ a:FileSnapshot,_ b:FileSnapshot,flags:UInt32?=nil)->Bool {
+        a.kind==b.kind && a.flags==(flags ?? b.flags) && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText
     }
     static func exists(_ url:URL)->Bool {var st=stat();return lstat(url.path,&st)==0}
     static func requireSpace(at directory:URL,bytes:UInt64) throws {

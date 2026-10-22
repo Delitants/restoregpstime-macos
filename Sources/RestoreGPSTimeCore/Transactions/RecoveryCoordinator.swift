@@ -13,19 +13,44 @@ public struct RecoveryCoordinator:Sendable {
         let journal=try RecoveryJournal(root:root,batchID:batchID)
         var restored=[URL](),conflicts=[String]()
         var ownRestoredPaths=[URL]()
-        let records=try journal.records().sorted {a,b in
+        var records=try journal.records().sorted {a,b in
             let ad=a.members.allSatisfy {$0.item.source.snapshot.kind == .directory},bd=b.members.allSatisfy {$0.item.source.snapshot.kind == .directory}
             if ad != bd {return !ad}
             if ad {return a.members[0].item.source.snapshot.url.path.count>b.members[0].item.source.snapshot.url.path.count}
             return a.groupID.uuidString<b.groupID.uuidString
         }
+        var blockedDirectories=[URL]()
+        if case .originalLocations=choice {
+            // A selected locked parent must permit child restores before its own final
+            // metadata/lock restoration. Validate it against the journal before unlocking.
+            for recordIndex in records.indices {
+                for memberIndex in records[recordIndex].members.indices {
+                    let member=records[recordIndex].members[memberIndex]
+                    guard member.item.source.snapshot.kind == .directory else {continue}
+                    let target=try Committer.target(member.item)
+                    let pendingDescendant=records.contains {record in record.members.contains {child in
+                        !child.restored && (child.after != nil || child.step != .pending) && child.item.source.snapshot.kind != .directory && child.item.name.finalURL.path != target.path && BatchPlanner.isWithin(child.item.name.finalURL,target)
+                    }}
+                    guard pendingDescendant,SecureFS.exists(target),try FileIdentityReader().snapshot(at:target).isLocked else {continue}
+                    do {
+                        _ = try state(member,record:records[recordIndex])
+                        records[recordIndex].phase = .restoring;try journal.persist(records[recordIndex])
+                        let current=try FileIdentityReader().snapshot(at:target)
+                        try SecureFS.flags(target,current.flags & ~UInt32(UF_IMMUTABLE))
+                    } catch {blockedDirectories.append(target);conflicts.append("Locked folder recovery stopped: "+error.localizedDescription)}
+                }
+            }
+        }
         for var record in records {
+            if record.members.contains(where:{member in blockedDirectories.contains {BatchPlanner.isWithin(member.item.name.finalURL,$0)}}) {continue}
             for index in record.members.indices where record.members[index].item.source.snapshot.kind == .directory {
                 let member=record.members[index],source=member.item.source.snapshot
-                if record.options.mode == .modifyInPlace,ownRestoredPaths.contains(where:{$0.path != source.url.path && BatchPlanner.isWithin($0,source.url)}) {
-                    let current=try FileIdentityReader().fingerprint(at:source.url)
+                let target=try Committer.target(member.item)
+                if SecureFS.exists(target),ownRestoredPaths.contains(where:{$0.path != target.path && BatchPlanner.isWithin($0,target)}) {
+                    let current=try FileIdentityReader().fingerprint(at:target)
                     let expected=member.after?.snapshot ?? source
-                    if current.snapshot.id.physicalKey==source.id.physicalKey,SecureFS.stableDirectoryAttributes(current.snapshot,expected),current.snapshot.creationDate==expected.creationDate {
+                    let flags=record.phase == .restoring ? expected.flags & ~UInt32(UF_IMMUTABLE):expected.flags
+                    if current.snapshot.id.physicalKey==expected.id.physicalKey,SecureFS.stableDirectoryAttributes(current.snapshot,expected,flags:flags),current.snapshot.creationDate==expected.creationDate {
                         record.members[index].after=current;try journal.persist(record)
                     }
                 }
@@ -36,6 +61,7 @@ public struct RecoveryCoordinator:Sendable {
             case .separateFolder(let output):outcome=try await restoreSeparately(record,journal:journal,output:output)
             }
             restored+=outcome.restored;conflicts+=outcome.conflicts;ownRestoredPaths+=outcome.restored
+            if outcome.isComplete {ownRestoredPaths+=record.members.filter {$0.item.mutation.outputKind == .xmpSidecar || record.options.mode == .saveCopies}.map {$0.item.name.finalURL}}
         }
         return .init(batchID:batchID,restored:restored,conflicts:conflicts)
     }
@@ -114,7 +140,16 @@ public struct RecoveryCoordinator:Sendable {
                 if !SecureFS.exists(stageRoot) {try SecureFS.privateDirectory(stageRoot)}
                 let retained=stageRoot.appendingPathComponent("\(index).restored-output")
                 if record.options.mode == .saveCopies || member.item.mutation.outputKind == .xmpSidecar {
-                    if states[index] == .changed {let current=try FileIdentityReader().snapshot(at:target);if current.isLocked {try SecureFS.flags(target,current.flags & ~UInt32(UF_IMMUTABLE))};try SecureFS.rename(target,retained)}
+                    if states[index] == .changed {
+                        let current=try FileIdentityReader().snapshot(at:target)
+                        if current.kind == .directory,!((try FileManager.default.contentsOfDirectory(at:target,includingPropertiesForKeys:nil)).isEmpty) {
+                            let expectedFlags=finalFlags(member)
+                            if expectedFlags & UInt32(UF_IMMUTABLE) != 0,current.flags==expectedFlags & ~UInt32(UF_IMMUTABLE) {try SecureFS.flags(target,expectedFlags)}
+                            throw RestoreError(.conflict,"An output folder still contains entries. Recovery will not move unrecognized contents.")
+                        }
+                        if current.isLocked {try SecureFS.flags(target,current.flags & ~UInt32(UF_IMMUTABLE))}
+                        try SecureFS.rename(target,retained)
+                    }
                     record.members[index].restored=true;try journal.persist(record);continue
                 }
 

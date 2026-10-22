@@ -72,8 +72,8 @@ public struct BatchPlanner:Sendable {
                 guard let name=names[key] else {throw RestoreError(.invalidInput,"Missing filename reservation.")}
                 var reasons=(errors[key] ?? [])+(dateErrors[key].map {[$0]} ?? []),decisions=[String:CapabilityDecision](),dateMutation:DateMutation?
                 if let reason=name.blockingReason {reasons.append(reason)}
-                if options.mode == .modifyInPlace && item.snapshot.kind == .regular && item.snapshot.id.linkCount>1 {reasons.append("In-place changes to multiply linked files are blocked. Save an independent copy.")}
-                if item.snapshot.isLocked && !request.finder.contains(.locked(false)) {reasons.append("The file is locked. Explicitly include Unlock to change it.")}
+                if options.mode == .modifyInPlace && !request.isFinderNotificationOnly && item.snapshot.kind == .regular && item.snapshot.id.linkCount>1 {reasons.append("In-place changes to multiply linked files are blocked. Save an independent copy.")}
+                if options.mode == .modifyInPlace && !request.isFinderNotificationOnly && item.snapshot.isLocked && !request.finder.contains(.locked(false)) {reasons.append("The file is locked. Explicitly include Unlock to change it.")}
                 if let recovery=options.recoveryRoot,Self.isWithin(item.snapshot.url,recovery) {reasons.append("Recovery originals cannot be inputs to this batch.")}
                 if let output=options.outputRoot,options.mode == .saveCopies,Self.isWithin(item.snapshot.url,output) {reasons.append("An input is already inside the output folder.")}
                 if let policy=request.dates,let resolution=item.dateResolution {

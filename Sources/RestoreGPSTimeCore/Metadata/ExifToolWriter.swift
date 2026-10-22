@@ -6,7 +6,7 @@ public actor ExifToolWriter {
     let reader:MetadataReader
     public init(paths:RuntimePaths) {self.paths=paths;reader=MetadataReader(paths:paths)}
     public func write(_ mutations:[TagMutation],to stage:URL,profile:ContainerProfile) async throws -> MetadataDocument {
-        try StageOwnership.shared.require(stage);try registry.validate(mutations,profile:profile)
+        try StageOwnership.shared.require(stage,kind:.regular);try registry.validate(mutations,profile:profile)
         guard mutations.count<=512 else {throw RestoreError(.invalidInput,"Too many metadata field changes in one operation.")}
         var args=["-overwrite_original_in_place","-P","-n","-charset","filename=UTF8","-api","LargeFileSupport=1","-api","QuickTimeUTC=1"]
         for mutation in mutations {
@@ -51,7 +51,7 @@ public actor ExifToolWriter {
         return "-\(tag)<=\(valueFile.path)"
     }
     func run(_ arguments:[String],to stage:URL) async throws {
-        try StageOwnership.shared.require(stage)
+        try StageOwnership.shared.require(stage,kind:.regular)
         let size=try FileIdentityReader().snapshot(at:stage).id.size
         let timeout=max(60,min(21600,60+Double(size)/1_000_000))
         await HelperLimiter.shared.acquire()
@@ -68,7 +68,7 @@ public actor ExifToolWriter {
 
 extension ExifToolWriter {
     func removeXMPLocation(to stage:URL) async throws {
-        try StageOwnership.shared.require(stage)
+        try StageOwnership.shared.require(stage,kind:.regular)
         await HelperLimiter.shared.acquire()
         let outcome:Result<Data,Error>
         do {

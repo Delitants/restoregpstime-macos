@@ -6,6 +6,7 @@ public enum FinderMutation:Codable,Equatable,Sendable {
     case extensionHidden(Bool),locked(Bool),label(Int),creator(Data),fileType(Data),removeWhereFroms,notify
 }
 public struct OperationRequest:Codable,Equatable,Sendable {
+    public var isFinderNotificationOnly:Bool {dates==nil && location==nil && tags.isEmpty && !removeGPS && !stripMetadata && rename.preserveOriginal && !trashHiddenFiles && !finder.isEmpty && finder.allSatisfy {$0 == .notify}}
     public var dates:DatePolicy?
     public var location:LocationWriteOptions?
     public var tags=[TagMutation]()

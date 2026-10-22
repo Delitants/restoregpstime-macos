@@ -16,11 +16,18 @@ extension SourceRevalidator {
         let ownPaths=records.flatMap {record in record.stageDirectories+record.members.filter {$0.step != .pending}.flatMap {[$0.item.source.snapshot.url,$0.item.name.finalURL]}}
         var result=previous
         for item in plan.groups.flatMap(\.items) where item.source.snapshot.kind == .directory {
-            let expected=previous[item.source.snapshot.id.physicalKey] ?? item.source
+            let recordIndex=records.firstIndex {$0.members.contains {$0.item.source.snapshot.id.physicalKey==item.source.snapshot.id.physicalKey}}
+            let committed=recordIndex.flatMap {records[$0].phase == .committed ? records[$0].members.first?.after:nil}
+            let expected=committed ?? previous[item.source.snapshot.id.physicalKey] ?? item.source
             if ownPaths.contains(where:{$0.path != item.source.snapshot.url.path && BatchPlanner.isWithin($0,item.source.snapshot.url)}) {
                 let current=try FileIdentityReader().fingerprint(at:item.source.snapshot.url)
                 guard current.snapshot.id.physicalKey==expected.snapshot.id.physicalKey,SecureFS.stableDirectoryAttributes(current.snapshot,expected.snapshot),current.snapshot.creationDate==expected.snapshot.creationDate else {throw RestoreError(.conflict,"A folder's unrelated attributes changed during the batch.")}
                 result[item.source.snapshot.id.physicalKey]=current
+                if let recordIndex,records[recordIndex].phase == .backedUp {
+                    var record=records[recordIndex]
+                    for index in record.members.indices where record.members[index].item.source.snapshot.id.physicalKey==item.source.snapshot.id.physicalKey {record.members[index].after=current}
+                    try journal.persist(record)
+                }
             }
         }
         return result

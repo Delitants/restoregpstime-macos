@@ -9,6 +9,11 @@ public struct DateMutationPlanner {
         guard final.timeIntervalSince1970.isFinite else { throw RestoreError(.invalidInput,"The adjusted date is out of range.") }
         var creation=policy.targets.contains(.creation) ? final:nil
         var modification=policy.targets.contains(.modification) ? final:nil
+        if policy.shiftOriginalTargets {
+            guard policy.sequenceStart==nil else {throw RestoreError(.invalidInput,"Independent original-date shifts cannot also use a date sequence.")}
+            if creation != nil {creation=snapshot.creationDate.addingTimeInterval(policy.shiftSeconds)}
+            if modification != nil {modification=snapshot.modificationDate.addingTimeInterval(policy.shiftSeconds)}
+        }
         var notes=[String]()
         if policy.requiresMonotonicFileDates && (creation ?? snapshot.creationDate) > (modification ?? snapshot.modificationDate) {
             guard policy.normalizeCompanionDate else { throw RestoreError(.conflict,"The volume requires changing the unselected companion date; choose normalization or another date.") }

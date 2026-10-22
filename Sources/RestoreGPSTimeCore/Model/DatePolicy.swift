@@ -19,6 +19,7 @@ public struct DatePolicy:Codable,Equatable,Sendable {
     public var quickTime:QuickTimeInterpretation?
     public var targets:DateTargets = [.creation,.modification]
     public var shiftSeconds:Double=0
+    public var shiftOriginalTargets=false
     public var sequenceStart:Date?
     public var sequenceStepSeconds:Double=0
     public var removeEmbeddedDates=false

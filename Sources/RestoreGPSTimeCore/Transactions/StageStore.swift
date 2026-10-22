@@ -36,11 +36,11 @@ struct StageStore {
             try Task.checkCancellation()
             let item=record.members[index].item,stage=record.members[index].stageURL!
             let result:StageVerification
-            if item.source.snapshot.kind == .regular || item.mutation.outputKind == .xmpSidecar {
+            do {
                 try StageOwnership.shared.register(stage,root:stage.deletingLastPathComponent())
                 defer {StageOwnership.shared.remove(stage)}
                 result=try await driver.apply(item.mutation,to:stage)
-            } else {result=try await driver.apply(item.mutation,to:stage)}
+            }
             let fingerprint=try FileIdentityReader().fingerprint(at:stage)
             guard result.contentHash==fingerprint.contentHash else {throw RestoreError(.verificationFailed,"The stage changed after driver verification.")}
             if !item.mutation.changesContent && fingerprint.contentHash != item.source.contentHash {throw RestoreError(.verificationFailed,"An attribute-only operation changed file bytes.")}
