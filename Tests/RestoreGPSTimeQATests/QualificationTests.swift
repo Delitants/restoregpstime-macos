@@ -9,6 +9,11 @@ final class QualificationTests:XCTestCase {
         let intel=QualificationHost(processArchitecture:"x86_64",hardwareARM:false,translated:false,osMajor:13,osVersion:"13.0",osBuild:"test")
         XCTAssertTrue(intel.isNative(architecture:"x86_64",osMajor:13))
     }
+    func testRegressionRequiresCandidateArchitectureAndSourceIdentity() {
+        XCTAssertFalse(RegressionBinding.accepts(sourceIdentityPassed:false,candidateArchitecture:"arm64",processArchitecture:"arm64",host:arm))
+        XCTAssertFalse(RegressionBinding.accepts(sourceIdentityPassed:true,candidateArchitecture:"x86_64",processArchitecture:"arm64",host:arm))
+        XCTAssertTrue(RegressionBinding.accepts(sourceIdentityPassed:true,candidateArchitecture:"arm64",processArchitecture:"arm64",host:arm))
+    }
     func testRealFormatMatrixRequiresEvidence() {
         let gates=QualificationResult.requiredGates.map {QualificationGate($0,.pass,"proof")}
         func result(_ gates:[QualificationGate])->QualificationResult {.init(sourceCommit:String(repeating:"a",count:40),appHash:String(repeating:"b",count:64),hostLabel:"local",host:arm,gates:gates)}

@@ -6,9 +6,10 @@ public final class RecoveryJournal:@unchecked Sendable {
     private let lock=NSLock()
     let checkpoint:@Sendable(TransactionPoint)throws->Void
     public init(root:URL,batchID:UUID,checkpoint:@escaping @Sendable(TransactionPoint)throws->Void={_ in}) throws {
-        let parent=try BatchPlanner.existingParent(of:root)
-        let suffix=String(root.standardizedFileURL.path.dropFirst(parent.standardizedFileURL.path.count))
-        self.root=try FileSystemPath.canonicalDirectory(parent).appendingPathComponent(suffix.trimmingCharacters(in:CharacterSet(charactersIn:"/")))
+        let location=try FileSystemPath.existingAncestor(of:root)
+        var resolved=try FileSystemPath.canonicalDirectory(location.parent)
+        for component in location.components {resolved=resolved.appendingPathComponent(component,isDirectory:true)}
+        self.root=resolved
         self.batchID=batchID;self.checkpoint=checkpoint
         let fd=try SecureFS.directory(self.root,create:true,mode:0o700);close(fd)
         var st=stat();guard lstat(self.root.path,&st)==0,st.st_uid==getuid(),st.st_mode & 0o022==0 else {throw RestoreError(.unsupported,"The recovery root must belong to this user and cannot be writable by other accounts.")}

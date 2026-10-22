@@ -33,3 +33,10 @@ PY
 xcrun stapler staple "$app" > "$evidence/staple.txt" 2>&1
 xcrun stapler validate "$app" > "$evidence/staple-validate.txt" 2>&1
 /usr/sbin/spctl --assess --type execute --verbose=4 "$app" > "$evidence/gatekeeper.txt" 2>&1
+
+python3 - "$repo_root/Scripts" "$evidence/gatekeeper.txt" <<'PYGATE'
+import pathlib,sys
+sys.path.insert(0,sys.argv[1])
+from release_gate import gatekeeper_accepted
+if not gatekeeper_accepted(pathlib.Path(sys.argv[2]).read_text()):raise SystemExit('Gatekeeper assessment was overridden or did not confirm notarized Developer ID; evidence retained, qualification blocked')
+PYGATE

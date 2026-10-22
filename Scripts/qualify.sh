@@ -8,12 +8,21 @@ while [ "$#" -gt 0 ]; do
 done
 [ -d "$app/Contents" ] && [ -n "$evidence" ] && [ ! -e "$evidence" ]
 app=$(cd "$app" && pwd)
+# Bind test expectations to the actual thin candidate, never a hardcoded CPU.
+app_arch=$(python3 - "$app" <<'PYARCH'
+import json,pathlib,subprocess,sys
+app=pathlib.Path(sys.argv[1]);identity=json.loads((app/'Contents/Resources/build-identity.json').read_text())
+arch=identity.get('architecture');actual=subprocess.check_output(['/usr/bin/lipo','-archs',str(app/'Contents/MacOS/RestoreGPSTime')],text=True).strip()
+if arch not in ('arm64','x86_64') or actual!=arch:raise SystemExit('Candidate CPU differs from its build identity')
+print(arch)
+PYARCH
+)
 mkdir -p work
 run_dir=$(mktemp -d "$repo_root/work/qa-run.XXXXXX")
 source=$(git rev-parse HEAD)
 # All regression media is generated. Suppress the opt-in system Trash operation.
 set +e
-env -u RESTOREGPSTIME_TEST_SYSTEM_TRASH RESTOREGPSTIME_TEST_APP="$app" RESTOREGPSTIME_TEST_APP_BUNDLE="$app" Scripts/test.sh > "$run_dir/regression.log" 2>&1
+env -u RESTOREGPSTIME_TEST_SYSTEM_TRASH RESTOREGPSTIME_TEST_ARCH="$app_arch" RESTOREGPSTIME_TEST_APP="$app" RESTOREGPSTIME_TEST_APP_BUNDLE="$app" Scripts/test.sh > "$run_dir/regression.log" 2>&1
 regression_exit=$?
 set -e
 if [ -n "$(git status --porcelain)" ]; then source=uncommitted; fi

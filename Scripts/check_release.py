@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse,json,pathlib,plistlib,subprocess,tempfile,zipfile
-from release_gate import COMMON_ASSETS,inspect_app,release_names,sha256,validate_manifest,validate_pair,verify_assets
+from release_gate import COMMON_ASSETS,inspect_app,release_names,sha256,validate_manifest,validate_pair,verify_assets,gatekeeper_accepted
 def tree_hashes(app):
  result={}
  for path in sorted(app.rglob('*')):
@@ -38,6 +38,10 @@ try:
  inventory=inspect_app(app)
  if inventory!=m.get('binaries'):errors.append('Extracted app Mach-O inventory differs from manifest')
  if sha256(app/'Contents/MacOS/RestoreGPSTime')!=m.get('appHash'):errors.append('Extracted executable differs from acceptance identity')
+ observer=pathlib.Path(__file__).resolve().parent/'observe-dependencies.sh'
+ observed_path=work/'observed-dependencies.json'
+ observed=run([str(observer),'--app',str(app),'--output',str(observed_path)],'dependency-observation')
+ if observed.returncode==0 and json.loads(observed_path.read_text())!=m.get('dependencyIdentity'):errors.append('Extracted runtime/database/capability hashes differ from the exact acceptance identity')
  build=json.loads((app/'Contents/Resources/build-identity.json').read_text())
  if build.get('sourceCommit')!=a.source_commit or build.get('sourceDirty') is not False or build.get('architecture')!=a.arch or build.get('configuration')!='release':errors.append('App build identity is not the exact clean release source')
  info=plistlib.loads((app/'Contents/Info.plist').read_bytes())
@@ -46,7 +50,8 @@ try:
  identity=run(['/usr/bin/codesign','--display','--verbose=4',str(app)],'codesign-identity').stderr
  if 'Authority=Developer ID Application:' not in identity or 'runtime' not in identity or 'TeamIdentifier='+m.get('signing',{}).get('teamID','') not in identity:errors.append('Actual signing identity or hardened runtime did not qualify')
  run(['/usr/bin/xcrun','stapler','validate',str(app)],'staple-validate')
- run(['/usr/sbin/spctl','--assess','--type','execute','--verbose=4',str(app)],'gatekeeper-app')
+ assessment=run(['/usr/sbin/spctl','--assess','--type','execute','--verbose=4',str(app)],'gatekeeper-app')
+ if not gatekeeper_accepted(assessment.stdout+assessment.stderr):errors.append('Normal notarized Gatekeeper acceptance is missing or overridden')
  # Both archives must install the same signed app. Mounting/install and quarantine
  # qualification are separately recorded native gates; never infer them from ZIP.
  dmg=next(name for name in release_names(m.get('version'),a.arch) if name.endswith('.dmg'))

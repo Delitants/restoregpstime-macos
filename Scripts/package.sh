@@ -24,6 +24,9 @@ PY
 if [ -n "$identity" ] || [ -n "$profile" ]; then
  Scripts/sign-and-notarize.sh --app "$app" --identity "$identity" --keychain-profile "$profile" --evidence-dir "$output/signing"
 fi
+# Observe identities with the same implementation used by frozen plans/QA,
+# after final signing. This mode does not execute the foreign-CPU helper.
+Scripts/observe-dependencies.sh --app "$app" --output "$output/dependency-identity.json" > "$output/dependency-build.log" 2>&1
 stage="$output/dmg-root";mkdir "$stage"
 /usr/bin/ditto "$app" "$stage/RestoreGPSTime.app"
 ln -s /Applications "$stage/Applications"

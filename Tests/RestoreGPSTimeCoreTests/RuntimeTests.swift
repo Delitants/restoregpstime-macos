@@ -47,7 +47,14 @@ final class RuntimeTests: CoreTestCase {
         catch let error as RestoreError { XCTAssertEqual(error.code, .cancelled) }
     }
     func testArchitectureAndDeploymentTarget() async throws {
-        let expected=ProcessInfo.processInfo.environment["RESTOREGPSTIME_TEST_ARCH"] ?? "arm64"
+        #if arch(arm64)
+        let compiledArchitecture="arm64"
+        #elseif arch(x86_64)
+        let compiledArchitecture="x86_64"
+        #else
+        let compiledArchitecture="unsupported"
+        #endif
+        let expected=ProcessInfo.processInfo.environment["RESTOREGPSTIME_TEST_ARCH"] ?? compiledArchitecture
         let entries=FileManager.default.enumerator(at:testApp.appendingPathComponent("Contents"),includingPropertiesForKeys:[.isRegularFileKey])!
         var nativeCount=0
         for case let executable as URL in entries {
@@ -56,6 +63,11 @@ final class RuntimeTests: CoreTestCase {
             let magic=try handle.read(upToCount:4) ?? Data();try handle.close()
             guard [Data([0xcf,0xfa,0xed,0xfe]),Data([0xca,0xfe,0xba,0xbe])].contains(magic) else { continue }
             nativeCount+=1
+            let linked=try await ProcessRunner().run(executable:URL(fileURLWithPath:"/usr/bin/otool"),arguments:["-L",executable.path],environment:[:],timeout:5)
+            for line in linked.text.split(separator:"\n").dropFirst() {
+                let dependency=line.trimmingCharacters(in:.whitespaces).components(separatedBy:" (compatibility version")[0]
+                XCTAssertTrue(dependency.hasPrefix("/usr/lib/") || dependency.hasPrefix("/System/Library/"),"External native dependency: "+dependency+" in "+executable.path)
+            }
             let result=try await ProcessRunner().run(executable:URL(fileURLWithPath:"/usr/bin/lipo"),arguments:["-archs",executable.path],environment:[:],timeout:5)
             XCTAssertEqual(result.text.trimmingCharacters(in:.whitespacesAndNewlines),expected,executable.path)
             let build=try await ProcessRunner().run(executable:URL(fileURLWithPath:"/usr/bin/xcrun"),arguments:["vtool","-show-build",executable.path],environment:["PATH":"/usr/bin:/bin"],timeout:5)

@@ -23,3 +23,8 @@ public struct QualificationResult:Codable,Sendable {
     public static let requiredGates=["source-identity","runtime","fixture-manifest","baseline-regression","genuine-formats","large-video","volumes","native-arm64-macos13","native-x86_64-macos13","native-arm64-current","native-x86_64-current","native-ui","finder-services-droplets","finder-isolated-login","instruments-10000","relocated-offline","developer-id","notarization"]
     public init(sourceCommit:String,appHash:String,hostLabel:String,host:QualificationHost,gates:[QualificationGate]) {schema=1;self.sourceCommit=sourceCommit;self.appHash=appHash;self.hostLabel=hostLabel;self.host=host;self.gates=gates}
 }
+
+// The supplied regression source alone does not establish candidate identity.
+enum RegressionBinding {
+    static func accepts(sourceIdentityPassed:Bool,candidateArchitecture:String,processArchitecture:String,host:QualificationHost)->Bool {sourceIdentityPassed && candidateArchitecture==processArchitecture && host.isNative(architecture:candidateArchitecture)}
+}

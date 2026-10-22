@@ -97,25 +97,40 @@ struct MediaRow:Identifiable {
     func applyPreview() async {
         guard canApply,let frozen=plan else {return}
         activePlan=frozen;plan=nil;previewRevision=nil;phase = .running;issue=nil;progress="Starting batch…"
+        var pending=[UUID:RowUpdate]()
+        var lastPublication:UInt64=0,lastYield=DispatchTime.now().uptimeNanoseconds
         for await event in await backend.execute(frozen) {
             switch event {
             case .started:break
             case .progress(let id,let text):
                 progress=text
-                for index in rows.indices where rows[index].groupID==id {rows[index].status="running"}
+                pending[id] = .init(status:"running",issue:nil)
             case .rejected(let validation):issue=validation.conflicts.map { $0.error.detail }.joined(separator:"\n")
-            case .group(let result):show(result)
+            case .group(let result):pending[result.groupID]=RowUpdate(result)
             case .finished(let result):
-                report=result;for group in result.results {show(group)}
+                report=result
+                for group in result.results {pending[group.groupID]=RowUpdate(group)}
+                publish(pending);pending.removeAll(keepingCapacity:true)
                 progress=result.cancelled ? "Cancelled after the current protected group finished.":(result.success ? "Batch completed.":"Batch finished with results to review.")
             }
+            let now=DispatchTime.now().uptimeNanoseconds
+            if !pending.isEmpty,now-lastPublication>=100_000_000 {publish(pending);pending.removeAll(keepingCapacity:true);lastPublication=now}
+            if now-lastYield>=8_000_000 {await Task.yield();lastYield=DispatchTime.now().uptimeNanoseconds}
         }
+        if !pending.isEmpty {publish(pending)}
         phase = .finished;activePlan=nil
     }
-    private func show(_ result:GroupResult) {
-        for index in rows.indices where rows[index].groupID==result.groupID {
-            rows[index].status=result.status.rawValue
-            if !result.errors.isEmpty {rows[index].issue=result.errors.joined(separator:"\n")}
+    private struct RowUpdate {
+        let status:String,issue:String?
+        init(status:String,issue:String?) {self.status=status;self.issue=issue}
+        init(_ result:GroupResult) {status=result.status.rawValue;issue=result.errors.isEmpty ? nil:result.errors.joined(separator:"\n")}
+    }
+    private func publish(_ updates:[UUID:RowUpdate]) {
+        // One linear projection and one Published assignment, independent of the
+        // number of completed groups. Interim events are keyed and coalesced.
+        rows=rows.map {value in
+            guard let id=value.groupID,let update=updates[id] else {return value}
+            var row=value;row.status=update.status;if let issue=update.issue {row.issue=issue};return row
         }
     }
     func cancel() {

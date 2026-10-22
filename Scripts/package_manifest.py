@@ -11,7 +11,7 @@ for name in sorted(release_names(a.version,a.arch)|COMMON_ASSETS):
  if not (root/name).is_file():raise SystemExit('Missing packaged document/archive: '+name)
  assets.append({'name':name,'sha256':sha256(root/name)})
 m={'schema':1,'application':'RestoreGPSTime','version':a.version,'architecture':a.arch,'minimumOS':'13.0','currentOSMajor':27,'sourceCommit':a.source_commit,'reviewedSourceCommit':None,'peerSourceCommit':None,'tag':f'v{a.version}-{a.arch}','stableReady':False,
- 'appHash':sha256(app/'Contents/MacOS/RestoreGPSTime'),'signing':{'developerID':'Authority=Developer ID Application:' in identity,'hardenedRuntime':'runtime' in identity,'notarization':accepted,'stapled':False,'teamID':team},
+ 'appHash':sha256(app/'Contents/MacOS/RestoreGPSTime'),'dependencyIdentity':json.loads((root/'dependency-identity.json').read_text()),'signing':{'developerID':'Authority=Developer ID Application:' in identity,'hardenedRuntime':'runtime' in identity,'notarization':accepted,'stapled':False,'teamID':team},
  'privacy':{'audited':False,'privateMaterial':None,'secretFound':None},'gates':{g:'missing' for g in REQUIRED_GATES},'hosts':[],'binaries':inspect_app(app),'assets':assets,
  'note':'Local candidate. Review and bind actual acceptance/signing evidence before stable checks; missing is not pass.'}
 with (root/'release-evidence.json').open('x') as f:json.dump(m,f,indent=2,sort_keys=True);f.write('\n')

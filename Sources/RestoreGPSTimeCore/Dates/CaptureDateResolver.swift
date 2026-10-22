@@ -24,8 +24,8 @@ public struct CaptureDateResolver {
                     let suffix=tag.hasSuffix(":DateTimeOriginal") ? "Original" : (tag.hasSuffix(":CreateDate") ? "Digitized":"")
                     if offset==nil,let text=try document.readValue("ExifIFD:OffsetTime"+suffix)?.text { offset=try WallClockParser().parseOffset(text) }
                     if precision==0,let text=try document.readValue("ExifIFD:SubSecTime"+suffix)?.text,!text.isEmpty {
-                        guard text.range(of:#"^\d{1,9}$"#,options:.regularExpression) != nil else { throw RestoreError(.invalidInput,"Invalid fractional capture seconds.") }
-                        fraction=Double("0."+text)!;precision=text.count;nanoseconds=Int32(text+String(repeating:"0",count:9-text.count))
+                        guard text.range(of:#"^[0-9]{1,9}$"#,options:.regularExpression) != nil,let subsecond=Double("0."+text),let exactNanos=Int32(text+String(repeating:"0",count:9-text.count)) else { throw RestoreError(.invalidInput,"Invalid fractional capture seconds.") }
+                        fraction=subsecond;precision=text.count;nanoseconds=exactNanos
                     }
                 }
                 let wall=WallClock(year:parsed.year,month:parsed.month,day:parsed.day,hour:parsed.hour,minute:parsed.minute,second:parsed.second,fraction:fraction,fractionalPrecision:precision,explicitOffset:offset,nanoseconds:nanoseconds)

@@ -27,17 +27,18 @@ public struct QualificationRunner {
         let build=(try? JSONSerialization.jsonObject(with:Data(contentsOf:buildURL))) as? [String:Any]
         let source=build?["sourceCommit"] as? String ?? "unrecorded"
         let executable=appURL.appendingPathComponent("Contents/MacOS/RestoreGPSTime")
+        let candidateArchitecture=(try? await ProcessRunner().run(executable:URL(fileURLWithPath:"/usr/bin/lipo"),arguments:["-archs",executable.path],environment:[:],timeout:5).text.trimmingCharacters(in:.whitespacesAndNewlines)) ?? "unknown"
         let hash=try await Task.detached {try FileIdentityReader().fingerprint(at:executable).contentHash}.value
         var gates=QualificationResult.requiredGates.map {QualificationGate($0,.missing,"Candidate-bound acceptance evidence has not been supplied.")}
         func set(_ id:String,_ state:GateStatus,_ detail:String) {if let i=gates.firstIndex(where:{$0.id==id}) {gates[i]=QualificationGate(id,state,detail)}}
-        if source.range(of:"^[0-9a-f]{40}$",options:.regularExpression) != nil,build?["sourceDirty"] as? Bool == false,build?["configuration"] as? String == "release",build?["architecture"] as? String == arch {
+        if source.range(of:"^[0-9a-f]{40}$",options:.regularExpression) != nil,build?["sourceDirty"] as? Bool == false,build?["configuration"] as? String == "release",build?["architecture"] as? String == arch,candidateArchitecture==arch {
             set("source-identity",.pass,"Candidate records a clean release source commit and matching architecture.")
         } else {set("source-identity",.missing,"A clean matching release build identity has not been established.")}
         if let log=ProcessInfo.processInfo.environment["RESTOREGPSTIME_QA_REGRESSION_LOG"],let recorded=ProcessInfo.processInfo.environment["RESTOREGPSTIME_QA_REGRESSION_SOURCE"],let status=ProcessInfo.processInfo.environment["RESTOREGPSTIME_QA_REGRESSION_EXIT"] {
             let logURL=URL(fileURLWithPath:log)
             try fm.copyItem(at:logURL,to:output.appendingPathComponent("regression.log"))
             if status != "0" {set("baseline-regression",.fail,"Candidate regression command failed; local log retained.")}
-            else if recorded==source,build?["sourceDirty"] as? Bool == false,host.isNative(architecture:arch) {set("baseline-regression",.pass,"Matching-source candidate regression command passed on this native host; local log retained.")}
+            else if recorded==source,RegressionBinding.accepts(sourceIdentityPassed:gates.contains {$0.id=="source-identity" && $0.status == .pass},candidateArchitecture:candidateArchitecture,processArchitecture:arch,host:host) {set("baseline-regression",.pass,"Matching-source candidate regression command passed on this native host; local log retained.")}
         }
         let encoder=JSONEncoder();encoder.outputFormatting=[.prettyPrinted,.sortedKeys]
         do {

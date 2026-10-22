@@ -168,12 +168,7 @@ public struct BatchPlanner:Sendable {
     }
     static func isWithin(_ url:URL,_ root:URL)->Bool {let path=url.standardizedFileURL.path,base=root.standardizedFileURL.path;return path==base || base=="/" || path.hasPrefix(base+"/")}
     static func existingParent(of url:URL) throws -> URL {
-        var current=url.standardizedFileURL,st=stat()
-        while lstat(current.path,&st) != 0 {
-            guard errno==ENOENT,current.path != "/" else {throw RestoreError(.io,"Cannot inspect a destination parent.")}
-            current=current.deletingLastPathComponent()
-        }
-        return current
+        try FileSystemPath.existingAncestor(of:url).parent
     }
     static func anchor(for target:URL) throws -> DestinationAnchor {
         let parent=try existingParent(of:target.deletingLastPathComponent()),snapshot=try FileIdentityReader().snapshot(at:parent)

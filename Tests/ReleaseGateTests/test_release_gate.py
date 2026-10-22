@@ -5,9 +5,9 @@ SHA='a'*40
 
 def valid(arch='arm64'):
     return {'schema':1,'application':'RestoreGPSTime','version':'1.0.0','architecture':arch,'minimumOS':'13.0','currentOSMajor':27,'sourceCommit':SHA,'reviewedSourceCommit':SHA,'peerSourceCommit':SHA,'tag':f'v1.0.0-{arch}',
-      'signing':{'developerID':True,'hardenedRuntime':True,'notarization':'Accepted','stapled':True,'teamID':'ABCDEFGHIJ'},
+      'appHash':'b'*64,'dependencyIdentity':{'engineHash':'d'*64,'databaseHash':'e'*64,'capabilityHash':'f'*64},'signing':{'developerID':True,'hardenedRuntime':True,'notarization':'Accepted','stapled':True,'teamID':'ABCDEFGHIJ'},
       'privacy':{'audited':True,'privateMaterial':False,'secretFound':False},'gates':{g:'pass' for g in gate.REQUIRED_GATES},
-      'hosts':[{'architecture':a,'hardwareARM':a=='arm64','translated':False,'osMajor':o,'current':o==27,'status':'pass','sourceCommit':SHA,'appHash':'b'*64} for a in ['arm64','x86_64'] for o in [13,27]],
+      'hosts':[{'architecture':a,'hardwareARM':a=='arm64','translated':False,'osMajor':o,'current':o==27,'status':'pass','sourceCommit':SHA,'appHash':'b'*64,'dependencyIdentity':{'engineHash':'d'*64,'databaseHash':'e'*64,'capabilityHash':'f'*64}} for a in ['arm64','x86_64'] for o in [13,27]],
       'binaries':[{'path':'Contents/MacOS/RestoreGPSTime','architectures':[arch],'minimumOS':'13.0','platform':'macOS','dependencies':['/usr/lib/libSystem.B.dylib']}],
       'assets':[{'name':f'RestoreGPSTime-1.0.0-{"AppleSilicon" if arch=="arm64" else "Intel"}.{ext}','sha256':'c'*64} for ext in ['zip','dmg']]+[{'name':name,'sha256':'c'*64} for name in sorted(gate.COMMON_ASSETS)]}
 
@@ -46,6 +46,23 @@ class ReleaseGateTests(unittest.TestCase):
         a,b=valid(),valid('x86_64');self.assertEqual(gate.validate_pair(a,b),[])
         b['sourceCommit']='d'*40;self.assertTrue(gate.validate_pair(a,b))
         a['reviewedSourceCommit']='e'*40;self.assertTrue(gate.validate_manifest(a))
+    def testHostHashesMustBindToTheExactArchitectureCandidate(self):
+        arm,intel=valid(),valid('x86_64');arm['appHash']='1'*64;intel['appHash']='2'*64
+        self.assertTrue(gate.validate_pair(arm,intel))
+        for m in [arm,intel]:
+            for host in m['hosts']:host['appHash']='1'*64 if host['architecture']=='arm64' else '2'*64
+        self.assertEqual(gate.validate_pair(arm,intel),[])
+        intel['hosts'][0]['dependencyIdentity']['engineHash']='9'*64
+        self.assertTrue(gate.validate_pair(arm,intel))
+    def testDisabledGatekeeperAndUnknownAssessmentDoNotPass(self):
+        self.assertFalse(gate.gatekeeper_accepted('accepted\noverride=security disabled\n'))
+        self.assertFalse(gate.gatekeeper_accepted('accepted\nsource=Unnotarized Developer ID\n'))
+        self.assertTrue(gate.gatekeeper_accepted('accepted\nsource=Notarized Developer ID\norigin=Developer ID Application: Example\n'))
+    def testAbsentTagDraftMustNameTheExactReviewedCommit(self):
+        self.assertTrue(gate.validate_publication_target({'draft':True,'target_commitish':'b'*40},None,SHA))
+        self.assertTrue(gate.validate_publication_target({'draft':True,'target_commitish':'main'},None,SHA))
+        self.assertEqual(gate.validate_publication_target({'draft':True,'target_commitish':SHA},None,SHA),[])
+        self.assertTrue(gate.validate_publication_target({'draft':False,'target_commitish':SHA},'c'*40,SHA))
     def testUploadRetryDoesNotOverwriteDifferentHash(self):
         self.assertEqual(gate.upload_disposition('c'*64,None),'upload')
         self.assertEqual(gate.upload_disposition('c'*64,'c'*64),'skip')

@@ -15,6 +15,8 @@ def valid_hash(value,length):return isinstance(value,str) and re.fullmatch('[0-9
 def min_os(value):
     if not isinstance(value,str) or not re.fullmatch(r'\d+\.\d+(?:\.\d+)?',value):return False
     return tuple(map(int,value.split('.')))<=(13,0,0)
+def valid_dependency(value):
+    return isinstance(value,dict) and set(value)=={'engineHash','databaseHash','capabilityHash'} and all(valid_hash(v,64) for v in value.values())
 def validate_manifest(m):
     errors=[]
     if not isinstance(m,dict):return ['Manifest is not an object']
@@ -32,11 +34,12 @@ def validate_manifest(m):
         if gates.get(gate)!='pass':errors.append('Missing/failing gate: '+gate)
     current=m.get('currentOSMajor')
     if not isinstance(current,int) or current<=13:errors.append('Current supported OS major is not recorded')
+    if not valid_hash(m.get('appHash'),64) or not valid_dependency(m.get('dependencyIdentity')):errors.append('Missing exact candidate application/dependency identity')
     hosts=m.get('hosts',[])
     if not isinstance(hosts,list):hosts=[]
     for cpu in ('arm64','x86_64'):
         for oldest in (True,False):
-            found=[h for h in hosts if isinstance(h,dict) and h.get('architecture')==cpu and h.get('hardwareARM') is (cpu=='arm64') and h.get('translated') is False and h.get('status')=='pass' and h.get('sourceCommit')==source and valid_hash(h.get('appHash'),64) and (h.get('osMajor')==13 if oldest else h.get('current') is True and isinstance(h.get('osMajor'),int) and h['osMajor']==current)]
+            found=[h for h in hosts if isinstance(h,dict) and h.get('architecture')==cpu and h.get('hardwareARM') is (cpu=='arm64') and h.get('translated') is False and h.get('status')=='pass' and h.get('sourceCommit')==source and valid_hash(h.get('appHash'),64) and valid_dependency(h.get('dependencyIdentity')) and (h.get('architecture')!=arch or h.get('appHash')==m.get('appHash') and h.get('dependencyIdentity')==m.get('dependencyIdentity')) and (h.get('osMajor')==13 if oldest else h.get('current') is True and isinstance(h.get('osMajor'),int) and h['osMajor']==current)]
             if len(found)!=1:errors.append(f'Missing or ambiguous native {cpu} '+('macOS 13' if oldest else 'current OS')+' acceptance')
     binaries=m.get('binaries',[])
     if not isinstance(binaries,list) or not binaries:errors.append('No Mach-O inventory');binaries=[]
@@ -59,7 +62,22 @@ def validate_manifest(m):
 def validate_pair(first,second):
     errors=validate_manifest(first)+validate_manifest(second)
     if {first.get('architecture'),second.get('architecture')}!={'arm64','x86_64'} or first.get('sourceCommit')!=second.get('sourceCommit'):errors.append('Architecture pair does not share its reviewed source')
+    expected={m.get('architecture'):(m.get('appHash'),m.get('dependencyIdentity')) for m in [first,second]}
+    for manifest in [first,second]:
+        for host in manifest.get('hosts',[]):
+            if isinstance(host,dict) and (host.get('appHash'),host.get('dependencyIdentity'))!=expected.get(host.get('architecture')):errors.append('Native host receipt does not bind the exact architecture candidate/dependencies')
+    a,b=first.get('dependencyIdentity',{}),second.get('dependencyIdentity',{})
+    if isinstance(a,dict) and isinstance(b,dict) and any(a.get(k)!=b.get(k) for k in ['databaseHash','capabilityHash']):errors.append('Candidate database/capability identities differ')
     return errors
+
+def gatekeeper_accepted(output):
+    lines=[line.strip() for line in output.splitlines()]
+    return not any(line.lower().startswith('override=') for line in lines) and 'source=Notarized Developer ID' in lines and any(re.fullmatch(r'(?:.*: )?accepted',line) for line in lines)
+
+def validate_publication_target(release,tag_commit,source):
+    if tag_commit is not None:return [] if tag_commit==source else ['Existing tag does not name the reviewed commit']
+    if release.get('draft') is not True or release.get('target_commitish')!=source:return ['An untagged draft must name the exact reviewed commit, without a moving branch alias']
+    return []
 
 def upload_disposition(expected_hash,existing_hash):
     if not valid_hash(expected_hash,64):raise ValueError('Invalid expected asset hash')

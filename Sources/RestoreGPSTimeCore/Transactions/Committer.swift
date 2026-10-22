@@ -23,16 +23,19 @@ public struct Committer:Sendable {
         return .init(groupID:group.id,status:.committed,outputs:record.members.compactMap {$0.after?.snapshot.url},recoveryURL:journal.recordURL(groupID:group.id))
     }
     static func target(_ item:PlannedItem) throws -> URL {
-        guard let anchor=item.destinationAnchor,BatchPlanner.isWithin(item.name.finalURL,anchor.requestedURL) else {throw RestoreError(.conflict,"Destination is outside its frozen parent.")}
+        guard let anchor=item.destinationAnchor else {throw RestoreError(.conflict,"Destination is outside its frozen parent.")}
         let current=try FileIdentityReader().snapshot(at:anchor.requestedURL)
         guard current.kind == .directory,current.id.physicalKey==anchor.identity.physicalKey,(try FileSystemPath.canonicalDirectory(anchor.requestedURL)).path==anchor.resolvedURL.path else {throw RestoreError(.conflict,"Destination parent identity changed.")}
-        let relative=String(item.name.finalURL.path.dropFirst(anchor.requestedURL.path.count)).trimmingCharacters(in:CharacterSet(charactersIn:"/"))
-        return anchor.resolvedURL.appendingPathComponent(relative)
+        let components=try FileSystemPath.relativeComponents(of:item.name.finalURL,under:anchor.requestedURL)
+        var target=anchor.resolvedURL
+        for component in components {target=target.appendingPathComponent(component)}
+        return target
     }
     private func commitMember(index:Int,record:inout RecoveryRecord,journal:RecoveryJournal,source:URL,target:URL,expectedSources:[String:SourceFingerprint],ownedDirectories:[String:SourceID]) throws {
         let item=record.members[index].item,reader=FileIdentityReader()
         guard let stage=record.members[index].stageURL,let expected=record.members[index].staged,try reader.fingerprint(at:stage)==expected else {throw RestoreError(.conflict,"The verified stage changed before commit.")}
-        try createParents(target.deletingLastPathComponent(),record:&record,journal:journal)
+        guard let anchor=item.destinationAnchor else {throw RestoreError(.conflict,"Missing frozen destination anchor.")}
+        try createParents(target.deletingLastPathComponent(),anchor:anchor.resolvedURL,record:&record,journal:journal)
         let inPlace=record.options.mode == .modifyInPlace && item.mutation.outputKind == .sourceCopy
         if inPlace {
             let actual=try reader.fingerprint(at:source)
@@ -90,16 +93,20 @@ public struct Committer:Sendable {
         }
         record.members[index].after=after;try persist(.complete)
     }
-    private func createParents(_ parent:URL,record:inout RecoveryRecord,journal:RecoveryJournal) throws {
-        let ancestor=try FileSystemPath.canonicalDirectory(BatchPlanner.existingParent(of:parent))
-        let prefix=ancestor.path.hasSuffix("/") ? ancestor.path:ancestor.path+"/"
-        let relative=parent.path==ancestor.path ? "":String(parent.path.dropFirst(prefix.count))
-        var current=ancestor
-        for component in relative.split(separator:"/") {
-            current=current.appendingPathComponent(String(component))
+    private func createParents(_ parent:URL,anchor:URL,record:inout RecoveryRecord,journal:RecoveryJournal) throws {
+        let components=try FileSystemPath.relativeComponents(of:parent,under:anchor)
+        var current=anchor
+        for component in components {
+            current=current.appendingPathComponent(component,isDirectory:true);var st=stat()
+            if lstat(current.path,&st)==0 {
+                guard st.st_mode & S_IFMT==S_IFDIR else {throw RestoreError(.conflict,"A destination hierarchy component became linked or unavailable.")}
+                let fd=try SecureFS.directory(current);close(fd);continue
+            }
+            guard errno==ENOENT else {throw SecureFS.error("Inspect reserved output hierarchy")}
             record.directoryIntents.append(current);try journal.persist(record)
             let fd=try SecureFS.directory(current.deletingLastPathComponent());defer {close(fd)}
             guard mkdirat(fd,current.lastPathComponent,0o755)==0 else {throw SecureFS.error("Create reserved output hierarchy")}
+            let child=try SecureFS.directory(current);close(child)
             let snapshot=try FileIdentityReader().snapshot(at:current)
             record.createdDirectories[current.path]=snapshot.id;try journal.persist(record)
         }

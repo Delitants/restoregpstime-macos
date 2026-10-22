@@ -4,7 +4,8 @@ import Darwin
 public struct RecoveryCoordinator:Sendable {
     let root:URL
     let driver:any MutationDriver
-    public init(root:URL,driver:any MutationDriver) {self.root=root;self.driver=driver}
+    let options:RunOptions
+    public init(root:URL,driver:any MutationDriver,options:RunOptions=RunOptions()) {self.root=root;self.driver=driver;self.options=options}
     public func restore(batchID:UUID,choice:RecoveryChoice) async throws -> RecoveryOutcome {
         let worker=Task.detached(priority:.userInitiated) {try await restoreBlocking(batchID:batchID,choice:choice)}
         return try await worker.value
@@ -35,8 +36,11 @@ public struct RecoveryCoordinator:Sendable {
                     do {
                         _ = try state(member,record:records[recordIndex])
                         records[recordIndex].phase = .restoring;try journal.persist(records[recordIndex])
-                        let current=try FileIdentityReader().snapshot(at:target)
-                        try SecureFS.flags(target,current.flags & ~UInt32(UF_IMMUTABLE))
+                        try coordinated(target) {
+                            _ = try state(records[recordIndex].members[memberIndex],record:records[recordIndex])
+                            let current=try FileIdentityReader().snapshot(at:target)
+                            try SecureFS.flags(target,current.flags & ~UInt32(UF_IMMUTABLE))
+                        }
                     } catch {blockedDirectories.append(target);conflicts.append("Locked folder recovery stopped: "+error.localizedDescription)}
                 }
             }
@@ -73,6 +77,15 @@ public struct RecoveryCoordinator:Sendable {
     }
     private func state(_ member:RecoveryMember,record:RecoveryRecord) throws -> State {
         let reader=FileIdentityReader(),source=try SecureFS.canonical(member.item.source.snapshot.url),target=try Committer.target(member.item)
+        // Persisted retirement proof must be checked before an already-restored
+        // source can mask an external edit to the displaced output.
+        if let held=member.recoveryRetiredURL,let expected=member.recoveryRetiredFingerprint,SecureFS.exists(held) {
+            let actual=try reader.fingerprint(at:held)
+            let preparedSwap=try member.restoreStageURL==held && member.restoreFingerprint.map {SecureFS.matches(actual,$0)}==true && SecureFS.exists(target) && SecureFS.matches(try reader.fingerprint(at:target),expected)
+            guard preparedSwap || SecureFS.matches(actual,expected,ignoreChangeTime:true,flags:expected.snapshot.flags & ~UInt32(UF_IMMUTABLE)) else {
+                throw RestoreError(.conflict,"A displaced output changed; both versions are retained. Inspect "+held.path)
+            }
+        }
         if let restored=member.restoreFingerprint,SecureFS.exists(source) {
             let current=try reader.fingerprint(at:source)
             if SecureFS.matches(current,restored,ignoreChangeTime:true,flags:member.item.source.snapshot.flags) || SecureFS.matches(current,restored,ignoreChangeTime:true) {return .restored}
@@ -110,58 +123,66 @@ public struct RecoveryCoordinator:Sendable {
         return fingerprint
     }
     func restoreGroup(_ original:RecoveryRecord,journal:RecoveryJournal) async throws -> RecoveryOutcome {
-        var record=original,states=[State](),conflicts=[String](),restored=[URL]()
+        var record=original,conflicts=[String](),restored=[URL]()
         do {
             for member in record.members {
-                let current=try state(member,record:record);states.append(current)
+                let current=try state(member,record:record)
                 if record.options.mode == .modifyInPlace && member.item.mutation.outputKind == .sourceCopy && (current == .changed || current == .notPublished) {_ = try verifiedBackup(member,journal:journal)}
             }
         } catch {return .init(batchID:record.batchID,restored:[],conflicts:[error.localizedDescription])}
         record.phase = .restoring;try journal.persist(record)
+        // A journal sync is an externally observable boundary. Recheck the whole
+        // group afterwards, then again inside every coordinated write accessor.
+        do {for member in record.members {_ = try state(member,record:record)}}
+        catch {record.phase = .recoveryNeeded;record.errors.append(error.localizedDescription);try journal.persist(record);return .init(batchID:record.batchID,restored:[],conflicts:[error.localizedDescription])}
         for index in record.members.indices {
             do {
                 let member=record.members[index],source=try SecureFS.canonical(member.item.source.snapshot.url),target=try Committer.target(member.item)
-                if states[index] == .untouched {
-                    if try FileIdentityReader().snapshot(at:source).flags != member.item.source.snapshot.flags {try SecureFS.flags(source,member.item.source.snapshot.flags)}
-                    record.members[index].restoreFingerprint=try FileIdentityReader().fingerprint(at:source)
+                let currentState=try state(member,record:record)
+                if currentState == .untouched {
+                    try coordinated(source) {
+                        guard try state(member,record:record)==currentState else {throw RestoreError(.conflict,"The source changed during restoration.")}
+                        if try FileIdentityReader().snapshot(at:source).flags != member.item.source.snapshot.flags {try SecureFS.flags(source,member.item.source.snapshot.flags)}
+                        record.members[index].restoreFingerprint=try FileIdentityReader().fingerprint(at:source)
+                    }
                     record.members[index].restored=true;try journal.persist(record);restored.append(source);continue
                 }
-                if states[index] == .duplicate {
+                if currentState == .duplicate {
                     guard try state(member,record:record) == .duplicate else {throw RestoreError(.conflict,"The duplicate output changed during restoration.")}
                     let stageRoot=member.stageURL!.deletingLastPathComponent(),retained=stageRoot.appendingPathComponent("\(index).restored-output")
-                    let current=try FileIdentityReader().snapshot(at:target)
-                    if current.isLocked {try SecureFS.flags(target,current.flags & ~UInt32(UF_IMMUTABLE))}
-                    try SecureFS.rename(target,retained)
-                    if member.item.source.snapshot.isLocked {try SecureFS.flags(source,member.item.source.snapshot.flags)}
-                    record.members[index].restoreFingerprint=try FileIdentityReader().fingerprint(at:source)
+                    try retire(index:index,record:&record,journal:journal,target:target,retained:retained,expectedState:.duplicate)
+                    try coordinated(source) {
+                        guard try state(record.members[index],record:record) == .untouched else {throw RestoreError(.conflict,"The original changed after duplicate retirement.")}
+                        if member.item.source.snapshot.isLocked {try SecureFS.flags(source,member.item.source.snapshot.flags)}
+                        record.members[index].restoreFingerprint=try FileIdentityReader().fingerprint(at:source)
+                    }
                     record.members[index].restored=true;try journal.persist(record);restored.append(source);continue
                 }
-                if states[index] == .restored {
-                    if try FileIdentityReader().snapshot(at:source).flags != member.item.source.snapshot.flags {try SecureFS.flags(source,member.item.source.snapshot.flags)}
-                    record.members[index].restoreFingerprint=try FileIdentityReader().fingerprint(at:source)
+                if currentState == .restored {
+                    try coordinated(source) {
+                        guard try state(member,record:record)==currentState else {throw RestoreError(.conflict,"The source changed during restoration.")}
+                        if try FileIdentityReader().snapshot(at:source).flags != member.item.source.snapshot.flags {try SecureFS.flags(source,member.item.source.snapshot.flags)}
+                        record.members[index].restoreFingerprint=try FileIdentityReader().fingerprint(at:source)
+                    }
                     record.members[index].restored=true;try journal.persist(record);restored.append(source);continue
                 }
                 let stageRoot=member.stageURL?.deletingLastPathComponent() ?? source.deletingLastPathComponent().appendingPathComponent(".RestoreGPSTime-restore-\(record.batchID.uuidString)-\(record.groupID.uuidString)")
                 if !SecureFS.exists(stageRoot) {try SecureFS.privateDirectory(stageRoot)}
                 let retained=stageRoot.appendingPathComponent("\(index).restored-output")
                 if record.options.mode == .saveCopies || member.item.mutation.outputKind == .xmpSidecar {
-                    if states[index] == .changed {
-                        let current=try FileIdentityReader().snapshot(at:target)
-                        if current.kind == .directory,!((try FileManager.default.contentsOfDirectory(at:target,includingPropertiesForKeys:nil)).isEmpty) {
-                            let expectedFlags=finalFlags(member)
-                            if expectedFlags & UInt32(UF_IMMUTABLE) != 0,current.flags==expectedFlags & ~UInt32(UF_IMMUTABLE) {try SecureFS.flags(target,expectedFlags)}
-                            throw RestoreError(.conflict,"An output folder still contains entries. Recovery will not move unrecognized contents.")
-                        }
-                        if current.isLocked {try SecureFS.flags(target,current.flags & ~UInt32(UF_IMMUTABLE))}
-                        try SecureFS.rename(target,retained)
+                    if currentState == .changed {
+                        try retire(index:index,record:&record,journal:journal,target:target,retained:retained,expectedState:.changed)
                     }
                     record.members[index].restored=true;try journal.persist(record);continue
                 }
 
                 if member.item.source.snapshot.kind == .directory {
                     _ = try verifiedBackup(member,journal:journal)
-                    try SecureFS.applyMetadata(member.item.source.snapshot,from:member.backupURL!,to:source)
-                    if member.item.source.snapshot.isLocked {try SecureFS.flags(source,member.item.source.snapshot.flags)}
+                    try coordinated(source) {
+                        guard try state(member,record:record)==currentState else {throw RestoreError(.conflict,"The folder changed during restoration.")}
+                        try SecureFS.applyMetadata(member.item.source.snapshot,from:member.backupURL!,to:source)
+                        if member.item.source.snapshot.isLocked {try SecureFS.flags(source,member.item.source.snapshot.flags)}
+                    }
                     guard SecureFS.attributesEqual(try FileIdentityReader().snapshot(at:source),member.item.source.snapshot) else {throw RestoreError(.verificationFailed,"Directory attributes did not restore exactly.")}
                     record.members[index].restoreFingerprint=try FileIdentityReader().fingerprint(at:source)
                     record.members[index].restored=true;try journal.persist(record);restored.append(source);continue
@@ -180,25 +201,65 @@ public struct RecoveryCoordinator:Sendable {
                 }
                 guard let stage=restoreStage,let expected=record.members[index].restoreFingerprint,SecureFS.exists(stage),try FileIdentityReader().fingerprint(at:stage)==expected else {throw RestoreError(.conflict,"A restore stage changed or requires manual recovery.")}
                 // All member conflicts were checked before the first restoration. Check again at each write.
-                let currentState=try state(record.members[index],record:record)
-                if currentState == .changed {
-                    let current=try FileIdentityReader().snapshot(at:target)
-                    if current.isLocked {try SecureFS.flags(target,current.flags & ~UInt32(UF_IMMUTABLE))}
-                    if source.path==target.path {try SecureFS.rename(stage,source,swap:true)}
-                    else {
-                        try SecureFS.rename(target,retained)
+                let publicationState=try state(record.members[index],record:record)
+                if publicationState == .changed {
+                    if source.path==target.path {
+                        try retire(index:index,record:&record,journal:journal,target:target,retained:stage,expectedState:.changed,swap:true)
+                    } else {
+                        try retire(index:index,record:&record,journal:journal,target:target,retained:retained,expectedState:.changed)
+                        try coordinated(source) {
+                            guard try state(record.members[index],record:record) == .notPublished else {throw RestoreError(.conflict,"The source changed before recovery publication.")}
+                            try SecureFS.rename(stage,source)
+                        }
+                    }
+                } else if publicationState == .notPublished {
+                    try coordinated(source) {
+                        guard try state(record.members[index],record:record) == .notPublished else {throw RestoreError(.conflict,"The source changed before recovery publication.")}
                         try SecureFS.rename(stage,source)
                     }
-                } else if currentState == .notPublished {try SecureFS.rename(stage,source)}
+                }
                 else {throw RestoreError(.conflict,"The recovery target changed during restoration.")}
-                if member.item.source.snapshot.isLocked {try SecureFS.flags(source,member.item.source.snapshot.flags)}
-                let after=try FileIdentityReader().fingerprint(at:source)
-                guard SecureFS.matches(after,expected,ignoreChangeTime:true,flags:member.item.source.snapshot.flags) else {throw RestoreError(.verificationFailed,"Restored attributes/data did not match the retained original.")}
+                try coordinated(source) {
+                    guard SecureFS.matches(try FileIdentityReader().fingerprint(at:source),expected,ignoreChangeTime:true) else {throw RestoreError(.conflict,"The restored source changed before its final flags.")}
+                    if member.item.source.snapshot.isLocked {try SecureFS.flags(source,member.item.source.snapshot.flags)}
+                    let after=try FileIdentityReader().fingerprint(at:source)
+                    guard SecureFS.matches(after,expected,ignoreChangeTime:true,flags:member.item.source.snapshot.flags) else {throw RestoreError(.verificationFailed,"Restored attributes/data did not match the retained original.")}
+                }
                 record.members[index].restored=true;try journal.persist(record);restored.append(source)
             } catch {conflicts.append(error.localizedDescription);record.errors.append(error.localizedDescription);record.phase = .recoveryNeeded;try journal.persist(record);break}
         }
         if conflicts.isEmpty {record.phase = .restored;try journal.persist(record)}
         return .init(batchID:record.batchID,restored:restored,conflicts:conflicts)
+    }
+    private func coordinated(_ url:URL,_ action:()throws->Void) throws {
+        var error:NSError?,result:Result<Void,Error>?
+        NSFileCoordinator(filePresenter:nil).coordinate(writingItemAt:url,options:.forReplacing,error:&error) {_ in result=Result {try action()}}
+        if let error {throw RestoreError(.io,"Recovery file coordination failed: \(error)")}
+        guard let result else {throw RestoreError(.io,"Recovery file coordination did not grant access.")};try result.get()
+    }
+    private func retire(index:Int,record:inout RecoveryRecord,journal:RecoveryJournal,target:URL,retained:URL,expectedState:State,swap:Bool=false) throws {
+        guard try state(record.members[index],record:record)==expectedState else {throw RestoreError(.conflict,"The output changed before retirement.")}
+        let expected=try FileIdentityReader().fingerprint(at:target)
+        record.members[index].recoveryRetiredURL=retained
+        record.members[index].recoveryRetiredFingerprint=expected
+        try journal.persist(record)
+        try coordinated(target) {
+            guard try state(record.members[index],record:record)==expectedState,
+                  try FileIdentityReader().fingerprint(at:target)==expected else {throw RestoreError(.conflict,"The output changed at the recovery journal boundary.")}
+            if expected.snapshot.kind == .directory,!((try FileManager.default.contentsOfDirectory(at:target,includingPropertiesForKeys:nil)).isEmpty) {
+                throw RestoreError(.conflict,"An output folder still contains entries. Recovery will not move unrecognized contents.")
+            }
+            if expected.snapshot.isLocked {try SecureFS.flags(target,expected.snapshot.flags & ~UInt32(UF_IMMUTABLE))}
+            try SecureFS.rename(swap ? retained:target,swap ? target:retained,swap:swap)
+            try options.checkpoint(.afterMember(index))
+            let displaced=try FileIdentityReader().fingerprint(at:retained)
+            guard SecureFS.matches(displaced,expected,ignoreChangeTime:true,flags:expected.snapshot.flags & ~UInt32(UF_IMMUTABLE)) else {
+                // Never exchange back over an occupied path. RENAME_EXCL either
+                // returns the edited inode to its vacant name or preserves both.
+                if !SecureFS.exists(target) {try? SecureFS.rename(retained,target)}
+                throw RestoreError(.conflict,"The displaced output changed during recovery; inspect "+target.path+" and "+retained.path)
+            }
+        }
     }
     private func restoreSeparately(_ record:RecoveryRecord,journal:RecoveryJournal,output:URL) async throws -> RecoveryOutcome {
         var restored=[URL](),conflicts=[String]()

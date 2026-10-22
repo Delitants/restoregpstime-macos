@@ -13,6 +13,8 @@ public struct RecoveryMember:Codable,Equatable,Sendable {
     public var after:SourceFingerprint?
     public var restoreStageURL:URL?
     public var restoreFingerprint:SourceFingerprint?
+    public var recoveryRetiredURL:URL?
+    public var recoveryRetiredFingerprint:SourceFingerprint?
     public var restored:Bool=false
     public init(item:PlannedItem) {self.item=item}
 }

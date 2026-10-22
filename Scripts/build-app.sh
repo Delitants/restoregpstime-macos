@@ -12,6 +12,7 @@ case "$arch" in arm64|x86_64) ;; *) exit 2;; esac
 case "$configuration" in debug|release) ;; *) exit 2;; esac
 cd "$repo_root"
 "$repo_root/Scripts/build-runtime.sh" --arch "$arch"
+runtime_prefix=$("$repo_root/Scripts/build-runtime.sh" --arch "$arch" --print-prefix)
 export CLANG_MODULE_CACHE_PATH="$repo_root/work/module-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$repo_root/work/module-cache"
 export MACOSX_DEPLOYMENT_TARGET=13.0
@@ -33,8 +34,8 @@ dirty=bool(subprocess.check_output(['git','status','--porcelain'],text=True).str
 (app/'Contents/Resources/build-identity.json').write_text(json.dumps({'schema':1,'sourceCommit':source,'sourceDirty':dirty,'architecture':sys.argv[2],'configuration':sys.argv[3],'minimumOS':'13.0'},sort_keys=True)+'\n')
 PYBUILD
 cp "$repo_root/App/Resources/AppIcon.icns" "$app/Contents/Resources/"
-cp "$repo_root/work/runtime-install/$arch-macos13/bin/perl" "$app/Contents/Helpers/perl"
-cp -R "$repo_root/work/runtime-install/$arch-macos13/lib" "$app/Contents/Resources/PerlRuntime/"
+cp "$runtime_prefix/bin/perl" "$app/Contents/Helpers/perl"
+cp -R "$runtime_prefix/lib" "$app/Contents/Resources/PerlRuntime/"
 python3 - "$app" <<'PY'
 import pathlib,shutil,sys
 app=pathlib.Path(sys.argv[1]); archroot=app/'Contents/Resources/PerlRuntime/lib/perl5/5.44.0/darwin-2level'
@@ -43,7 +44,7 @@ for path in archroot.rglob('*.bundle'):
     target=native/path.relative_to(archroot);target.parent.mkdir(parents=True,exist_ok=True)
     shutil.move(str(path),str(target))
 PY
-cp "$repo_root/work/runtime-install/$arch-macos13/build-receipt.json" "$app/Contents/Resources/runtime-identity.json"
+cp "$runtime_prefix/build-receipt.json" "$app/Contents/Resources/runtime-identity.json"
 cp "$repo_root/work/sources/exiftool-13.59/exiftool" "$app/Contents/Resources/ExifTool/"
 cp -R "$repo_root/work/sources/exiftool-13.59/lib" "$app/Contents/Resources/ExifTool/"
 cp -R "$repo_root/ThirdParty/" "$app/Contents/Resources/Notices/"
