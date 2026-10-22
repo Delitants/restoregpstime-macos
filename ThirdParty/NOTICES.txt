@@ -18,3 +18,8 @@ https://www.geonames.org/export/
 
 The app performs no online geocoding. Source URLs, hashes and build provenance are
 recorded in Dependencies/dependencies.lock.json and the bundled runtime receipt.
+
+Distribution packaging omits Perl installation .packlist receipts and replaces
+local installation prefixes in Config_heavy.pl and CORE/config.h with the
+neutral /RestoreGPSTimeRuntime label. Runtime module lookup uses bundled paths.
+Release native executables have developer debug symbols removed before signing.

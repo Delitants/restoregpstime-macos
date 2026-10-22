@@ -35,6 +35,7 @@ try:
   if total>2_147_483_648:raise ValueError('App ZIP exceeds its two GiB extraction bound')
  run(['/usr/bin/ditto','-x','-k',str(root/zipname),str(work/'extracted')],'extract-zip')
  app=work/'extracted/RestoreGPSTime.app'
+ run([str(pathlib.Path(__file__).resolve().parent/'audit-bundle-paths.py'),'--app',str(app),'--repository',str(pathlib.Path(__file__).resolve().parents[1])],'personal-build-path-audit')
  inventory=inspect_app(app)
  if inventory!=m.get('binaries'):errors.append('Extracted app Mach-O inventory differs from manifest')
  if sha256(app/'Contents/MacOS/RestoreGPSTime')!=m.get('appHash'):errors.append('Extracted executable differs from acceptance identity')
