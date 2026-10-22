@@ -2,7 +2,7 @@ import Foundation
 
 public actor MetadataReader {
     private let paths: RuntimePaths
-    private let limiter=HelperLimiter(limit:2)
+    private let limiter=HelperLimiter.shared
     private var active=0,peak=0,completed=0
     public init(paths: RuntimePaths) { self.paths = paths }
     public func metrics() -> MetadataReadMetrics { .init(active:active,maximumActive:peak,completed:completed) }
@@ -27,7 +27,8 @@ public actor MetadataReader {
 
 public struct MetadataReadMetrics:Sendable { public let active:Int;public let maximumActive:Int;public let completed:Int }
 
-private actor HelperLimiter {
+actor HelperLimiter {
+    static let shared=HelperLimiter(limit:2)
     private var active=0
     private let limit:Int
     private var waiters=[CheckedContinuation<Void,Never>]()
