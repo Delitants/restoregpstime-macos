@@ -93,7 +93,7 @@ struct WorkspaceView:View {
     private var importBar:some View {
         HStack(spacing:12) {
             Button {Task {let urls=await Panels.importFiles();if !urls.isEmpty {_ = await session.openURLs(urls);section = .dates}}} label:{Label("Add files",systemImage:"plus")}.fixedSize().keyboardShortcut("o").disabled(model.isBusy)
-            Text("\(model.rows.count) files").font(.caption).foregroundStyle(.secondary)
+            Text("\(model.rows.count) \(model.rows.count == 1 ? "file":"files")").font(.caption).foregroundStyle(.secondary)
             Spacer()
             if utility {Button("Back to batch") {section = .dates}.fixedSize()}
             else {Button {inspectorVisible=true} label:{Label("File details",systemImage:"info.circle")}.fixedSize().disabled(selection==nil).keyboardShortcut("i")}
