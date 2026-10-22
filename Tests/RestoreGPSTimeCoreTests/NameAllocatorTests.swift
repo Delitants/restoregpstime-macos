@@ -2,6 +2,15 @@ import XCTest
 @testable import RestoreGPSTimeCore
 
 final class NameAllocatorTests:NamingTestCase {
+    func testSequenceUsesExactCaptureOrderBelowDatePrecision() throws {
+        var later=try item("a.HEIC"),earlier=try item("z.HEIC")
+        let a=try FileTimestamp(seconds:1_704_160_000,nanoseconds:2),b=try FileTimestamp(seconds:1_704_160_000,nanoseconds:1)
+        XCTAssertEqual(a.date,b.date,"The case deliberately falls below Date precision.")
+        later.dateResolution = .init(source:"ExifIFD:DateTimeOriginal",original:"later",instant:a.date,offsetSeconds:0,fractionalPrecision:9,interpretation:"Explicit offset",warnings:[],exactTimestamp:a)
+        earlier.dateResolution = .init(source:"ExifIFD:DateTimeOriginal",original:"earlier",instant:b.date,offsetSeconds:0,fractionalPrecision:9,interpretation:"Explicit offset",warnings:[],exactTimestamp:b)
+        let names=try NameAllocator().reserve(groups:AssetGrouper().group(items:[later,earlier]),destinations:destination())
+        XCTAssertEqual(names.first?.sourceKey,earlier.snapshot.id.physicalKey);XCTAssertEqual(names.first?.sequence,1)
+    }
     func testCountryOnlyAndCityOnlyTemplatesNeedOnlySelectedPlaceFields() throws {
         for (place,pattern,expected) in [(PlaceMatch(city:"",country:"France"),"{country}-{sequence:04}.{extension}","France-0001.HEIC"),(PlaceMatch(city:"Paris",country:""),"{city}-{sequence:04}.{extension}","Paris-0001.HEIC")] {
             let names=try NameAllocator().reserve(groups:AssetGrouper().group(items:[item("input.HEIC",place:place)]),destinations:destination(),template:.init(pattern))

@@ -7,17 +7,18 @@ struct ReportExporter {
             let result=report.results.first {$0.groupID==group.id}
             return group.items.map {item in
                 var changes=[String:[String:Any]]()
-                for mutation in item.mutation.tags {
+                for mutation in (try? MetadataMutationDriver.expandedTags(item.mutation,document:item.metadata)) ?? item.mutation.tags {
                     let id:TagID,value:TagValue?
                     switch mutation {case .set(let key,let tag):id=key;value=tag;case .remove(let key):id=key;value=nil}
                     if !includeCoordinates && Self.coordinateField(id.rawValue) {continue}
                     changes[id.rawValue]=value.map {["operation":"set","value":Self.json($0)]} ?? ["operation":"remove"]
                 }
-                var row:[String:Any]=["groupID":group.id.uuidString,"sourceName":item.source.snapshot.url.lastPathComponent,"sourcePath":item.source.snapshot.url.path,"outputPath":item.name.finalURL.path,"status":result?.status.rawValue ?? group.eligibility.rawValue,"messages":result?.errors ?? group.blockingReasons,"creationBefore":Self.date(item.source.snapshot.creationDate),"modificationBefore":Self.date(item.source.snapshot.modificationDate),"metadataChanges":changes]
+                var row:[String:Any]=["groupID":group.id.uuidString,"sourceName":item.source.snapshot.url.lastPathComponent,"sourcePath":item.source.snapshot.url.path,"outputPath":item.name.finalURL.path,"status":result?.status.rawValue ?? group.eligibility.rawValue,"messages":result?.errors ?? group.blockingReasons,"creationBefore":Self.date(item.source.snapshot.creationDate,exact:item.source.snapshot.creationTimestamp),"modificationBefore":Self.date(item.source.snapshot.modificationDate,exact:item.source.snapshot.modificationTimestamp),"metadataChanges":changes]
+                row["operations"]=["removeGPS":item.mutation.removeGPS,"stripMetadata":item.mutation.stripMetadata,"dateNotes":item.mutation.dates?.notes ?? []]
                 if let recovery=result?.recoveryURL {row["recoveryURL"]=recovery.path}
-                if let date=item.mutation.dates?.creationDate {row["plannedCreation"]=Self.date(date)}
-                if let date=item.mutation.dates?.modificationDate {row["plannedModification"]=Self.date(date)}
-                if let date=item.mutation.dates?.embeddedDate {row["plannedCapture"]=Self.date(date)}
+                if let date=item.mutation.dates?.creationDate {row["plannedCreation"]=Self.date(date,exact:item.mutation.dates?.creationTimestamp)}
+                if let date=item.mutation.dates?.modificationDate {row["plannedModification"]=Self.date(date,exact:item.mutation.dates?.modificationTimestamp)}
+                if let date=item.mutation.dates?.embeddedDate {row["plannedCapture"]=Self.date(date,exact:item.mutation.dates?.embeddedTimestamp)}
                 if let place=item.place {row["placeName"]=place.displayName;row["placeOrigin"]=place.origin.rawValue;if let km=place.distanceKM {row["nearestPlaceDistanceKM"]=km}}
                 if includeCoordinates,let coordinates=try? MetadataCoordinates.read(item.metadata) {row["latitude"]=coordinates.0;row["longitude"]=coordinates.1}
                 return row
@@ -29,7 +30,7 @@ struct ReportExporter {
             let object:[String:Any]=["schema":1,"application":"RestoreGPSTime","batchID":report.batchID.uuidString,"startedAt":Self.date(report.startedAt),"finishedAt":Self.date(report.finishedAt),"saveMode":report.plan.options.mode.rawValue,"cancelled":report.cancelled,"includesCoordinateFields":includeCoordinates,"recoveryRoot":report.plan.options.recoveryRoot?.path ?? "","entries":entries]
             data=try JSONSerialization.data(withJSONObject:object,options:[.prettyPrinted,.sortedKeys])
         case "csv":
-            var columns=["sourceName","sourcePath","outputPath","status","creationBefore","plannedCreation","modificationBefore","plannedModification","plannedCapture","placeName","messages","metadataChanges","recoveryURL"]
+            var columns=["sourceName","sourcePath","outputPath","status","creationBefore","plannedCreation","modificationBefore","plannedModification","plannedCapture","placeName","messages","metadataChanges","operations","recoveryURL"]
             if includeCoordinates {columns += ["latitude","longitude"]}
             var lines=[columns.map(Self.cell).joined(separator:",")]
             for row in entries {lines.append(try columns.map {key -> String in
@@ -60,8 +61,15 @@ struct ReportExporter {
         case .null:return NSNull()
         }
     }
-    private static func date(_ value:Date)->String {
-        let formatter=ISO8601DateFormatter();formatter.formatOptions=[.withInternetDateTime,.withFractionalSeconds];formatter.timeZone=TimeZone(secondsFromGMT:0);return formatter.string(from:value)
+    private static func date(_ value:Date,exact:FileTimestamp?=nil)->String {
+        let formatter=ISO8601DateFormatter();formatter.timeZone=TimeZone(secondsFromGMT:0)
+        if let exact {
+            formatter.formatOptions=[.withInternetDateTime]
+            let base=formatter.string(from:Date(timeIntervalSince1970:Double(exact.seconds)))
+            guard base.hasSuffix("Z") else {return "epoch seconds \(exact.seconds), nanoseconds \(exact.nanoseconds)"}
+            return String(base.dropLast())+"."+String(format:"%09d",exact.nanoseconds)+"Z"
+        }
+        formatter.formatOptions=[.withInternetDateTime,.withFractionalSeconds];return formatter.string(from:value)
     }
     private static func cell(_ value:String)->String {
         let trimmed=value.drop(while:{$0==" "})

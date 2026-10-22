@@ -14,10 +14,10 @@ public struct FileIdentityReader {
         if kind == .directory, (try? url.resourceValues(forKeys:[.isPackageKey]).isPackage) == true { kind = .package }
         let values = kind == .symlink ? nil : try? url.resourceValues(forKeys:[.volumeUUIDStringKey,.ubiquitousItemDownloadingStatusKey])
         if values?.ubiquitousItemDownloadingStatus == .notDownloaded { kind = .unavailable }
-        let id = SourceID(device:UInt64(UInt32(bitPattern:st.st_dev)),inode:UInt64(st.st_ino),size:UInt64(max(0,st.st_size)),modified:date(st.st_mtimespec),changed:date(st.st_ctimespec),linkCount:UInt64(st.st_nlink),volumeID:values?.volumeUUIDString ?? "device:\(st.st_dev)")
+        let id = SourceID(device:UInt64(UInt32(bitPattern:st.st_dev)),inode:UInt64(st.st_ino),size:UInt64(max(0,st.st_size)),modified:date(st.st_mtimespec),changed:date(st.st_ctimespec),linkCount:UInt64(st.st_nlink),volumeID:values?.volumeUUIDString ?? "device:\(st.st_dev)",modifiedTimestamp:FileTimestamp(st.st_mtimespec),changedTimestamp:FileTimestamp(st.st_ctimespec))
         let attrs = (kind == .regular || kind == .directory || kind == .package) ? try readXattrs(url) : [:]
         let hashes = attrs.mapValues { Self.hash($0) }
-        return .init(url:url.standardizedFileURL,id:id,kind:kind,creationDate:date(st.st_birthtimespec),modificationDate:date(st.st_mtimespec),flags:st.st_flags,permissions:UInt16(st.st_mode & 0o7777),ownerID:st.st_uid,groupID:st.st_gid,xattrHashes:hashes,finderInfo:attrs["com.apple.FinderInfo"],aclText:(kind == .symlink || kind == .unavailable) ? nil : acl(url))
+        return .init(url:url.standardizedFileURL,id:id,kind:kind,creationDate:date(st.st_birthtimespec),modificationDate:date(st.st_mtimespec),flags:st.st_flags,permissions:UInt16(st.st_mode & 0o7777),ownerID:st.st_uid,groupID:st.st_gid,xattrHashes:hashes,finderInfo:attrs["com.apple.FinderInfo"],aclText:(kind == .symlink || kind == .unavailable) ? nil : acl(url),creationTimestamp:FileTimestamp(st.st_birthtimespec),modificationTimestamp:FileTimestamp(st.st_mtimespec))
     }
     public func fingerprint(at url: URL) throws -> SourceFingerprint {
         let before = try snapshot(at:url)

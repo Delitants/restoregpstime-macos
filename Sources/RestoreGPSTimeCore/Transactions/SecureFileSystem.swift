@@ -37,9 +37,9 @@ enum SecureFS {
         guard acl_set_fd(fd,acl)==0,fchmod(fd,directory ? 0o700:0o600)==0 else {throw error("Protect private evidence")}
     }
     static func dates(_ snapshot:FileSnapshot,fd:Int32) throws {
-        func ts(_ date:Date)->timespec {let seconds=floor(date.timeIntervalSince1970);return timespec(tv_sec:Int(seconds),tv_nsec:Int((date.timeIntervalSince1970-seconds)*1e9))}
         var list=attrlist();list.bitmapcount=UInt16(ATTR_BIT_MAP_COUNT);list.commonattr=attrgroup_t(ATTR_CMN_CRTIME|ATTR_CMN_MODTIME)
-        var values=[ts(snapshot.creationDate),ts(snapshot.modificationDate)]
+        let creation=try snapshot.creationTimestamp ?? FileTimestamp(date:snapshot.creationDate),modified=try snapshot.modificationTimestamp ?? FileTimestamp(date:snapshot.modificationDate)
+        var values=[creation.timeSpec,modified.timeSpec]
         let result=values.withUnsafeMutableBytes {fsetattrlist(fd,&list,$0.baseAddress,$0.count,0)}
         guard result==0 else {throw error("Preserve filesystem dates")}
     }
@@ -73,7 +73,7 @@ enum SecureFS {
         try dates(expected.snapshot,fd:output)
         guard fchflags(output,expected.snapshot.flags & ~UInt32(UF_IMMUTABLE))==0,fsync(output)==0 else {throw error("Sync copied attributes")}
         let copied=try FileIdentityReader().fingerprint(at:destination)
-        guard copied.contentHash==expected.contentHash,copied.snapshot.xattrHashes==expected.snapshot.xattrHashes,copied.snapshot.permissions==expected.snapshot.permissions,copied.snapshot.aclText==expected.snapshot.aclText,abs(copied.snapshot.creationDate.timeIntervalSince(expected.snapshot.creationDate))<0.00001,abs(copied.snapshot.modificationDate.timeIntervalSince(expected.snapshot.modificationDate))<0.00001 else {throw RestoreError(.verificationFailed,"The target filesystem did not preserve the original data and attributes.")}
+        guard copied.contentHash==expected.contentHash,copied.snapshot.xattrHashes==expected.snapshot.xattrHashes,copied.snapshot.permissions==expected.snapshot.permissions,copied.snapshot.aclText==expected.snapshot.aclText,datesEqual(copied.snapshot,expected.snapshot) else {throw RestoreError(.verificationFailed,"The target filesystem did not preserve the original data and attributes.")}
         if vault {try restrict(output,directory:isDirectory);guard fsync(output)==0 else {throw error("Sync retained original")}}
         return try FileIdentityReader().fingerprint(at:destination)
     }
@@ -89,10 +89,13 @@ enum SecureFS {
     }
     static func matches(_ actual:SourceFingerprint,_ expected:SourceFingerprint,ignoreChangeTime:Bool=false,flags:UInt32?=nil)->Bool {
         let a=actual.snapshot,b=expected.snapshot
-        return actual.contentHash==expected.contentHash && a.id.physicalKey==b.id.physicalKey && a.id.size==b.id.size && a.kind==b.kind && a.creationDate==b.creationDate && a.modificationDate==b.modificationDate && a.flags==(flags ?? b.flags) && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText && (ignoreChangeTime || a.id.changed==b.id.changed)
+        return actual.contentHash==expected.contentHash && a.id.physicalKey==b.id.physicalKey && a.id.size==b.id.size && a.kind==b.kind && datesEqual(a,b) && a.flags==(flags ?? b.flags) && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText && (ignoreChangeTime || FileTimestamp.matches(a.id.changedTimestamp,b.id.changedTimestamp,date:a.id.changed,expectedDate:b.id.changed))
     }
     static func attributesEqual(_ a:FileSnapshot,_ b:FileSnapshot,flags:UInt32?=nil)->Bool {
-        a.creationDate==b.creationDate && a.modificationDate==b.modificationDate && a.kind==b.kind && a.flags==(flags ?? b.flags) && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText
+        datesEqual(a,b) && a.kind==b.kind && a.flags==(flags ?? b.flags) && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText
+    }
+    static func datesEqual(_ a:FileSnapshot,_ b:FileSnapshot)->Bool {
+        FileTimestamp.matches(a.creationTimestamp,b.creationTimestamp,date:a.creationDate,expectedDate:b.creationDate) && FileTimestamp.matches(a.modificationTimestamp,b.modificationTimestamp,date:a.modificationDate,expectedDate:b.modificationDate)
     }
     static func stableDirectoryAttributes(_ a:FileSnapshot,_ b:FileSnapshot,flags:UInt32?=nil)->Bool {
         a.kind==b.kind && a.flags==(flags ?? b.flags) && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText

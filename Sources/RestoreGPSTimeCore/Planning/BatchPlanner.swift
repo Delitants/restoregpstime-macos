@@ -115,8 +115,8 @@ public struct BatchPlanner:Sendable {
                 }
                 var anchor:DestinationAnchor?
                 do {anchor=try Self.anchor(for:name.finalURL)} catch {reasons.append(error.localizedDescription)}
-                let sourceDates:DateMutation?
-                if metadataSidecar,let change=dateMutation {sourceDates = .init(creationDate:change.creationDate,modificationDate:change.modificationDate,embeddedDate:nil,embeddedPrecision:change.embeddedPrecision,embeddedOffsetSeconds:change.embeddedOffsetSeconds,removeEmbeddedDates:false,notes:change.notes)} else {sourceDates=dateMutation}
+                var sourceDates=dateMutation
+                if metadataSidecar {sourceDates?.embeddedDate=nil;sourceDates?.embeddedTimestamp=nil;sourceDates?.removeEmbeddedDates=false}
                 let mutation=MutationPlan(dates:sourceDates,tags:metadataSidecar ? []:tags,removeGPS:request.removeGPS,stripMetadata:request.stripMetadata,finder:request.finder,profile:item.metadata.profile,allowedMetadataChanges:.init(tags:metadataSidecar ? []:tagIDs,removesGPS:request.removeGPS,stripsDescriptive:request.stripMetadata))
                 do {try await Self.qualifyMetadata(mutation,document:item.metadata,source:item.snapshot)} catch {reasons.append(error.localizedDescription)}
                 let source=fingerprints[key] ?? .init(snapshot:item.snapshot,contentHash:"")
@@ -130,7 +130,9 @@ public struct BatchPlanner:Sendable {
                     let support=capabilities.decision(for:.embeddedWrite,document:sidecarDocument,snapshot:item.snapshot)
                     if !support.isSupported {sidecarReasons.append(support.reason)}
                     let sidecarName=NameReservation(groupID:group.id,sourceKey:key+":xmp",originalURL:item.snapshot.url,finalURL:target,sequence:name.sequence,wasTruncated:name.wasTruncated,needsTemporaryRename:false,blockingReason:sidecarReasons.first)
-                    let sidecarDates=dateMutation.map {DateMutation(creationDate:nil,modificationDate:nil,embeddedDate:$0.embeddedDate,embeddedPrecision:$0.embeddedPrecision,embeddedOffsetSeconds:$0.embeddedOffsetSeconds,removeEmbeddedDates:$0.removeEmbeddedDates,notes:$0.notes)}
+                    var sidecarDates=dateMutation
+                    sidecarDates?.creationDate=nil;sidecarDates?.creationTimestamp=nil
+                    sidecarDates?.modificationDate=nil;sidecarDates?.modificationTimestamp=nil
                     let sidecarMutation=MutationPlan(dates:sidecarDates,tags:tags,outputKind:.xmpSidecar,profile:sidecarDocument.profile,allowedMetadataChanges:.init(tags:tagIDs))
                     do {try await Self.qualifyMetadata(sidecarMutation,document:sidecarDocument,source:item.snapshot)} catch {sidecarReasons.append(error.localizedDescription)}
                     plannedItems.append(.init(source:source,metadata:sidecarDocument,resolution:item.dateResolution,place:item.place,name:sidecarName,mutation:sidecarMutation,capabilities:["embeddedWrite":support],destinationAnchor:anchor,blockingReasons:sidecarReasons))

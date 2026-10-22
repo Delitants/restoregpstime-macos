@@ -31,11 +31,11 @@ struct FinderToolSheet:View {
             if let preview {Text("Current preference: \(String(describing:preview.previous))").font(.caption).textSelection(.enabled)}
             if let issue {Text(issue).foregroundStyle(.orange).textSelection(.enabled)}
             HStack {
-                Button("Cancel") {dismiss()}.keyboardShortcut(.cancelAction)
+                Button("Cancel") {dismiss()}.keyboardShortcut(.cancelAction).disabled(working)
                 Spacer()
-                Button("Apply") {Task {await apply(restart:false)}}
-                Button("Apply and Restart Finder") {Task {await apply(restart:true)}}
-            }.disabled(working || (tool != .restore && preview==nil))
+                Button("Apply") {Task {await apply(restart:false)}}.disabled(working || (tool != .restore && preview==nil))
+                Button("Apply and Restart Finder") {Task {await apply(restart:true)}}.disabled(working || (tool != .restore && preview==nil))
+            }
         }.padding(24).frame(width:520)
         .task {if tool != .restore {do {preview=try await session.finder.preview(visible:tool == .show)} catch {issue=error.localizedDescription}}}
     }

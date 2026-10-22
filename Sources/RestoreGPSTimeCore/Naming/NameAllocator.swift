@@ -41,9 +41,14 @@ public struct NameAllocator {
             // Only this source name may be replaced by its own staged file.
             return entries.contains {$0.standardizedFileURL.path != item.snapshot.url.standardizedFileURL.path}
         }
+        func capture(_ group:AssetGroup)->FileTimestamp? {
+            guard let resolution=group.primary.dateResolution else {return nil}
+            return resolution.exactTimestamp ?? (try? FileTimestamp(date:resolution.instant))
+        }
         let ordered=groups.sorted {
-            let ad=$0.primary.dateResolution?.instant ?? .distantFuture,bd=$1.primary.dateResolution?.instant ?? .distantFuture
-            if ad != bd {return ad<bd}
+            let ad=capture($0),bd=capture($1)
+            if let ad,let bd,ad != bd {return ad<bd}
+            if (ad != nil) != (bd != nil) {return ad != nil}
             let a=relative($0.primary).precomposedStringWithCanonicalMapping,b=relative($1.primary).precomposedStringWithCanonicalMapping
             if a != b {return a<b};return $0.primary.snapshot.url.path.utf8.lexicographicallyPrecedes($1.primary.snapshot.url.path.utf8)
         }

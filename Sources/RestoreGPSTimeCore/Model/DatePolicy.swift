@@ -35,4 +35,7 @@ public struct DateMutation:Codable,Equatable,Sendable {
     public var embeddedOffsetSeconds:Int
     public var removeEmbeddedDates:Bool
     public var notes:[String]
+    public var creationTimestamp:FileTimestamp?=nil
+    public var modificationTimestamp:FileTimestamp?=nil
+    public var embeddedTimestamp:FileTimestamp?=nil
 }

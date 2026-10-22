@@ -8,7 +8,7 @@ public struct WallClockParser {
         guard let match=regex.firstMatch(in:text,range:NSRange(text.startIndex...,in:text)) else { throw RestoreError(.invalidInput,"Invalid date: \(text)") }
         func part(_ i:Int)->String { guard let r=Range(match.range(at:i),in:text) else {return ""};return String(text[r]) }
         let fraction=part(7),offset=part(8)
-        let value=WallClock(year:Int(part(1))!,month:Int(part(2))!,day:Int(part(3))!,hour:Int(part(4))!,minute:Int(part(5))!,second:Int(part(6))!,fraction:Double("0."+fraction) ?? 0,fractionalPrecision:fraction.count,explicitOffset:offset.isEmpty ? nil : try parseOffset(offset))
+        let value=WallClock(year:Int(part(1))!,month:Int(part(2))!,day:Int(part(3))!,hour:Int(part(4))!,minute:Int(part(5))!,second:Int(part(6))!,fraction:Double("0."+fraction) ?? 0,fractionalPrecision:fraction.count,explicitOffset:offset.isEmpty ? nil : try parseOffset(offset),nanoseconds:Int32((fraction+String(repeating:"0",count:9-fraction.count)).prefix(9)))
         _=try utcBase(value)
         return value
     }

@@ -50,7 +50,7 @@ public struct RecoveryCoordinator:Sendable {
                     let current=try FileIdentityReader().fingerprint(at:target)
                     let expected=member.after?.snapshot ?? source
                     let flags=record.phase == .restoring ? expected.flags & ~UInt32(UF_IMMUTABLE):expected.flags
-                    if current.snapshot.id.physicalKey==expected.id.physicalKey,SecureFS.stableDirectoryAttributes(current.snapshot,expected,flags:flags),current.snapshot.creationDate==expected.creationDate {
+                    if current.snapshot.id.physicalKey==expected.id.physicalKey,SecureFS.stableDirectoryAttributes(current.snapshot,expected,flags:flags),FileTimestamp.matches(current.snapshot.creationTimestamp,expected.creationTimestamp,date:current.snapshot.creationDate,expectedDate:expected.creationDate) {
                         record.members[index].after=current;try journal.persist(record)
                     }
                 }

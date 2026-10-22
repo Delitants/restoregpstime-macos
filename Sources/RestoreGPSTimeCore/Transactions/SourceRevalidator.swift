@@ -21,7 +21,7 @@ extension SourceRevalidator {
             let expected=committed ?? previous[item.source.snapshot.id.physicalKey] ?? item.source
             if ownPaths.contains(where:{$0.path != item.source.snapshot.url.path && BatchPlanner.isWithin($0,item.source.snapshot.url)}) {
                 let current=try FileIdentityReader().fingerprint(at:item.source.snapshot.url)
-                guard current.snapshot.id.physicalKey==expected.snapshot.id.physicalKey,SecureFS.stableDirectoryAttributes(current.snapshot,expected.snapshot),current.snapshot.creationDate==expected.snapshot.creationDate else {throw RestoreError(.conflict,"A folder's unrelated attributes changed during the batch.")}
+                guard current.snapshot.id.physicalKey==expected.snapshot.id.physicalKey,SecureFS.stableDirectoryAttributes(current.snapshot,expected.snapshot),FileTimestamp.matches(current.snapshot.creationTimestamp,expected.snapshot.creationTimestamp,date:current.snapshot.creationDate,expectedDate:expected.snapshot.creationDate) else {throw RestoreError(.conflict,"A folder's unrelated attributes changed during the batch.")}
                 result[item.source.snapshot.id.physicalKey]=current
                 if let recordIndex,records[recordIndex].phase == .backedUp {
                     var record=records[recordIndex]

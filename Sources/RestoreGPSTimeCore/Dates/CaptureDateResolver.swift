@@ -9,8 +9,8 @@ public struct CaptureDateResolver {
         case .automaticCapture:
             automatic=true
             tags=document.profile.family == .video ? ["Keys:CreationDate","QuickTime:CreationDate","XMP-exif:DateTimeOriginal","XMP-xmp:CreateDate","QuickTime:CreateDate","Track1:MediaCreateDate","Track1:TrackCreateDate"] : ["ExifIFD:DateTimeOriginal","XMP-exif:DateTimeOriginal","XMP-xmp:CreateDate","ExifIFD:CreateDate"]
-        case .fileCreation: return Self.instant(snapshot.creationDate,source:"File creation date")
-        case .fileModification: return Self.instant(snapshot.modificationDate,source:"File modification date")
+        case .fileCreation: return Self.instant(snapshot.creationDate,source:"File creation date",exactTimestamp:snapshot.creationTimestamp)
+        case .fileModification: return Self.instant(snapshot.modificationDate,source:"File modification date",exactTimestamp:snapshot.modificationTimestamp)
         case .specific(let date): return Self.instant(date,source:"Specific date")
         default: throw RestoreError(.invalidInput,"This date source requires its explicit reference context.")
         }
@@ -19,25 +19,29 @@ public struct CaptureDateResolver {
             guard let raw=document.tags[tag]?.text,!raw.isEmpty else { continue }
             do {
                 let parsed=try WallClockParser().parse(raw)
-                var offset=parsed.explicitOffset,fraction=parsed.fraction,precision=parsed.fractionalPrecision
+                var offset=parsed.explicitOffset,fraction=parsed.fraction,precision=parsed.fractionalPrecision,nanoseconds=parsed.nanoseconds
                 if tag.hasPrefix("ExifIFD:") || tag.hasPrefix("IFD0:") {
                     let suffix=tag.hasSuffix(":DateTimeOriginal") ? "Original" : (tag.hasSuffix(":CreateDate") ? "Digitized":"")
                     if offset==nil,let text=document.tags["ExifIFD:OffsetTime"+suffix]?.text { offset=try WallClockParser().parseOffset(text) }
                     if precision==0,let text=document.tags["ExifIFD:SubSecTime"+suffix]?.text,!text.isEmpty {
                         guard text.range(of:#"^\d{1,9}$"#,options:.regularExpression) != nil else { throw RestoreError(.invalidInput,"Invalid fractional capture seconds.") }
-                        fraction=Double("0."+text)!;precision=text.count
+                        fraction=Double("0."+text)!;precision=text.count;nanoseconds=Int32(text+String(repeating:"0",count:9-text.count))
                     }
                 }
-                let wall=WallClock(year:parsed.year,month:parsed.month,day:parsed.day,hour:parsed.hour,minute:parsed.minute,second:parsed.second,fraction:fraction,fractionalPrecision:precision,explicitOffset:offset)
+                let wall=WallClock(year:parsed.year,month:parsed.month,day:parsed.day,hour:parsed.hour,minute:parsed.minute,second:parsed.second,fraction:fraction,fractionalPrecision:precision,explicitOffset:offset,nanoseconds:nanoseconds)
                 let integer=tag.range(of:#"^(QuickTime|Track\d+):(CreateDate|ModifyDate|MediaCreateDate|MediaModifyDate|TrackCreateDate|TrackModifyDate)$"#,options:.regularExpression) != nil
                 let resolved=try TimezoneResolver().resolve(wall,policy:policy,quickTimeInteger:integer)
-                return .init(source:tag,original:raw,instant:resolved.instant,offsetSeconds:resolved.offset,fractionalPrecision:precision,interpretation:resolved.interpretation,warnings:warnings)
+                let whole=try WallClockParser().utcBase(wall).timeIntervalSince1970-Double(resolved.offset)
+                let exact=try FileTimestamp(seconds:Int64(whole),nanoseconds:nanoseconds ?? Int32((fraction*1e9).rounded()))
+                return .init(source:tag,original:raw,instant:exact.date,offsetSeconds:resolved.offset,fractionalPrecision:precision,interpretation:resolved.interpretation,warnings:warnings,exactTimestamp:exact)
             } catch let error as RestoreError where automatic && error.code == .invalidInput { warnings.append("\(tag): \(error.detail)") }
         }
         throw RestoreError(.missingMetadata,"No valid date was found for the selected source. "+warnings.joined(separator:" "))
     }
-    static func instant(_ date:Date,source:String,warnings:[String]=[]) -> DateResolution {
-        .init(source:source,original:ISO8601DateFormatter().string(from:date),instant:date,offsetSeconds:0,fractionalPrecision:fractionalPrecision(date.timeIntervalSince1970),interpretation:"Existing absolute instant",warnings:warnings)
+    static func instant(_ date:Date,source:String,warnings:[String]=[],exactTimestamp:FileTimestamp?=nil) -> DateResolution {
+        let precision=exactTimestamp?.fractionalPrecision ?? fractionalPrecision(date.timeIntervalSince1970)
+        let exact=exactTimestamp ?? (try? FileTimestamp(date:date).rounded(precision:precision))
+        return .init(source:source,original:ISO8601DateFormatter().string(from:date),instant:exact?.date ?? date,offsetSeconds:0,fractionalPrecision:precision,interpretation:"Existing absolute instant",warnings:warnings,exactTimestamp:exact)
     }
     static func fractionalPrecision(_ seconds:Double)->Int {
         let fraction=seconds-floor(seconds)

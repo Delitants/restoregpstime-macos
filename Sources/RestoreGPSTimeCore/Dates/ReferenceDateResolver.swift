@@ -14,8 +14,8 @@ public struct ReferenceDateResolver {
     public init() {}
     public func resolve(source:SourceChoice,snapshot:FileSnapshot,context:ReferenceDateContext) async throws -> DateResolution {
         switch source {
-        case .fileCreation: return CaptureDateResolver.instant(snapshot.creationDate,source:"File creation date")
-        case .fileModification: return CaptureDateResolver.instant(snapshot.modificationDate,source:"File modification date")
+        case .fileCreation: return CaptureDateResolver.instant(snapshot.creationDate,source:"File creation date",exactTimestamp:snapshot.creationTimestamp)
+        case .fileModification: return CaptureDateResolver.instant(snapshot.modificationDate,source:"File modification date",exactTimestamp:snapshot.modificationTimestamp)
         case .specific(let date): return CaptureDateResolver.instant(date,source:"Specific date")
         case .current: return CaptureDateResolver.instant(context.frozenNow,source:"Current time frozen at preview")
         case .reset: return CaptureDateResolver.instant(Date(timeIntervalSince1970:-2_082_844_800),source:"Reset to 1904-01-01 UTC")
@@ -26,8 +26,8 @@ public struct ReferenceDateResolver {
         case .referenceFile(let field):
             let matched=try await matchReference(snapshot:snapshot,context:context)
             switch field {
-            case .creation:return CaptureDateResolver.instant(matched.creationDate,source:"Reference file creation: "+matched.url.lastPathComponent)
-            case .modification:return CaptureDateResolver.instant(matched.modificationDate,source:"Reference file modification: "+matched.url.lastPathComponent)
+            case .creation:return CaptureDateResolver.instant(matched.creationDate,source:"Reference file creation: "+matched.url.lastPathComponent,exactTimestamp:matched.creationTimestamp)
+            case .modification:return CaptureDateResolver.instant(matched.modificationDate,source:"Reference file modification: "+matched.url.lastPathComponent,exactTimestamp:matched.modificationTimestamp)
             case .capture:
                 guard let reader=context.reader else { throw RestoreError(.runtimeUnavailable,"A metadata reader is required for reference capture dates.") }
                 var policy=context.datePolicy;policy.source = .automaticCapture

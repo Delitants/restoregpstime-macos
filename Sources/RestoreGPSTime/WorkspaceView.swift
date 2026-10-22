@@ -95,6 +95,7 @@ struct WorkspaceView:View {
                     DestinationView(model:model)
                     DisclosureGroup("Import scope") {
                         VStack(alignment:.leading) {
+                            Toggle("Include files",isOn:$model.discovery.includeFiles)
                             Toggle("Include subfolders",isOn:$model.discovery.recursive)
                             Toggle("Include folders themselves",isOn:$model.discovery.includeFolders)
                             Toggle("Include hidden files",isOn:$model.discovery.includeHidden)
@@ -104,6 +105,7 @@ struct WorkspaceView:View {
                 }.padding(16)
             }.frame(minWidth:250,idealWidth:290,maxWidth:360).disabled(model.isBusy)
         }
+        .onChange(of:model.discovery.includeFiles) {_ in refreshScope()}
         .onChange(of:model.discovery.recursive) {_ in refreshScope()}
         .onChange(of:model.discovery.includeFolders) {_ in refreshScope()}
         .onChange(of:model.discovery.includeHidden) {_ in refreshScope()}

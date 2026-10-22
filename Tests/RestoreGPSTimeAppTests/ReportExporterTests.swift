@@ -10,6 +10,19 @@ final class ReportExporterTests:AppTestCase {
         let plan=try await backend.preview(items:[input],request:request,options:options)
         return .init(plan:plan,startedAt:Date(),results:plan.groups.map {.init(groupID:$0.id,status:.failed,errors:["Unchanged synthetic input"])},cancelled:false)
     }
+    func testReportPreservesExactPlannedDatesAndActualTagDestinations() async throws {
+        let base=try item(),document=MetadataDocument(tags:["ExifIFD:DateTimeOriginal":.string("2024:01:02 03:04:05"),"ExifIFD:SubSecTimeOriginal":.string("123456789"),"ExifIFD:OffsetTimeOriginal":.string("+02:00")],profile:.init(identifier:"JPEG",family:.photo))
+        let input=InspectedItem(snapshot:base.snapshot,metadata:document),backend=FakeAppBackend(items:[input])
+        var request=OperationRequest();var policy=DatePolicy();policy.targets=[.creation,.modification,.capture];policy.shiftSeconds=3600;request.dates=policy
+        var options=BatchOptions();options.outputRoot=workspace.appendingPathComponent("Output")
+        let plan=try await backend.preview(items:[input],request:request,options:options),report=BatchReport(plan:plan,startedAt:Date(),results:[],cancelled:false),file=workspace.appendingPathComponent("precise.json")
+        try ReportExporter().export(report,to:file)
+        let object=try XCTUnwrap(JSONSerialization.jsonObject(with:Data(contentsOf:file)) as? [String:Any]),entries=try XCTUnwrap(object["entries"] as? [[String:Any]]),row=try XCTUnwrap(entries.first)
+        XCTAssertEqual(row["plannedCreation"] as? String,"2024-01-02T02:04:05.123456789Z")
+        XCTAssertEqual(row["plannedCapture"] as? String,"2024-01-02T02:04:05.123456789Z")
+        let changes=try XCTUnwrap(row["metadataChanges"] as? [String:[String:Any]])
+        XCTAssertEqual(changes["ExifIFD:SubSecTimeOriginal"]?["value"] as? String,"123456789")
+    }
     func testReportCoordinatesDefaultOffAndJSONKeepsTypes() async throws {
         let report=try await report(),file=workspace.appendingPathComponent("report.json")
         try ReportExporter().export(report,to:file)

@@ -8,7 +8,7 @@ public actor AttributeMutationDriver:MutationDriver {
         let result=try await metadata.apply(mutation,to:stage)
         let finder=mutation.finder.filter {switch $0 {case .locked,.notify:return false;default:return true}}
         if !finder.isEmpty {_ = try FinderAttributeWriter().apply(.init(mutations:finder),to:stage)}
-        if let dates=mutation.dates {_ = try FileDateWriter().apply(.init(creationDate:dates.creationDate,modificationDate:dates.modificationDate),to:stage)}
+        if let dates=mutation.dates {_ = try FileDateWriter().apply(.init(creationDate:dates.creationDate,modificationDate:dates.modificationDate,creationTimestamp:dates.creationTimestamp,modificationTimestamp:dates.modificationTimestamp),to:stage)}
         let final=try FileIdentityReader().fingerprint(at:stage)
         guard final.contentHash==result.contentHash else {throw RestoreError(.verificationFailed,"An attribute write changed the verified media bytes.")}
         return .init(contentHash:final.contentHash,integrityValidator:result.integrityValidator,verifiedTags:result.verifiedTags,notes:result.notes+["Selected Finder attributes and final filesystem dates verified; final lock is applied at commit."])

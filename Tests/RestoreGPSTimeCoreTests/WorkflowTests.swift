@@ -2,6 +2,18 @@ import XCTest
 @testable import RestoreGPSTimeCore
 
 final class WorkflowTests:XCTestCase {
+    func testFixedOffsetBoundaryRoundTripsAndExtremeIntegerRejects() throws {
+        let store=WorkflowStore()
+        for offset in [-64800,64800] {
+            var request=OperationRequest();var policy=DatePolicy();policy.fixedOffsetSeconds=offset;request.dates=policy
+            let document=WorkflowDocument(name:"Offset",request:request)
+            XCTAssertEqual(try store.decode(store.encode(document)),document)
+        }
+        for offset in [Int.min,Int.max,-64801,64801] {
+            var request=OperationRequest();var policy=DatePolicy();policy.fixedOffsetSeconds=offset;request.dates=policy
+            XCTAssertThrowsError(try store.encode(.init(name:"Invalid",request:request)))
+        }
+    }
     func testWorkflowRoundTrip() throws {
         var request=OperationRequest();var dates=DatePolicy();dates.timeZoneID="Europe/Paris";dates.quickTime = .cameraLocal;request.dates=dates;request.rename=NameTemplate()
         let document=WorkflowDocument(name:"Restore camera dates",request:request),store=WorkflowStore()

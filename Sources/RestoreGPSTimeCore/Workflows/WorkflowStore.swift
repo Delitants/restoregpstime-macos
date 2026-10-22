@@ -50,7 +50,7 @@ public struct WorkflowStore:Sendable {
         _=try request.rename.parsed()
         if request.trashHiddenFiles {guard request.dates==nil,request.location==nil,request.tags.isEmpty,!request.removeGPS,!request.stripMetadata,request.rename.preserveOriginal,request.finder.isEmpty,request.metadataDestination == .embedded else {throw invalid("Trash cleanup must be a separate workflow")}}
         if let policy=request.dates {
-            guard policy.shiftSeconds.isFinite,policy.sequenceStepSeconds.isFinite,policy.fixedOffsetSeconds.map({(-50_400...50_400).contains($0)}) ?? true else {throw invalid("Invalid date shift or offset")}
+            guard policy.shiftSeconds.isFinite,policy.sequenceStepSeconds.isFinite,policy.fixedOffsetSeconds.map({(-64_800...64_800).contains($0)}) ?? true else {throw invalid("Invalid date shift or offset")}
             if let zone=policy.timeZoneID,TimeZone(identifier:zone)==nil {throw invalid("Unknown time zone")}
             switch policy.source {
             case .tag(let key):guard TagID(rawValue:key) != nil else {throw invalid("Invalid qualified date tag")}
