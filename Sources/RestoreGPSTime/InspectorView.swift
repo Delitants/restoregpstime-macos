@@ -47,6 +47,12 @@ struct InspectorView:View {
                         }
                         Toggle("Exclude from this batch",isOn:Binding(get:{model.request.excludedSourceKeys.contains(item.snapshot.id.physicalKey)},set:{if $0 {model.request.excludedSourceKeys.insert(item.snapshot.id.physicalKey)} else {model.request.excludedSourceKeys.remove(item.snapshot.id.physicalKey)}}))
                         Toggle("Unlink this asset explicitly",isOn:Binding(get:{model.request.groups.unlinkedSourceKeys.contains(item.snapshot.id.physicalKey)},set:{if $0 {model.request.groups.unlinkedSourceKeys.insert(item.snapshot.id.physicalKey)} else {model.request.groups.unlinkedSourceKeys.remove(item.snapshot.id.physicalKey)}}))
+                        if !item.metadata.ambiguousIdentifiers.isEmpty {Text("Conflicting metadata copies: "+item.metadata.ambiguousIdentifiers.sorted().joined(separator:", ")).font(.caption).foregroundStyle(.orange).textSelection(.enabled)}
+                        if !item.metadata.occurrences.isEmpty {
+                            DisclosureGroup("Metadata copy provenance") {
+                                ForEach(Array(item.metadata.occurrences.enumerated()),id:\.offset) {_,field in detail(field.selectableID,field.value.text)}
+                            }
+                        }
                         ForEach(item.metadata.diagnostics,id:\.self) {Text($0).font(.caption).foregroundStyle(.orange).textSelection(.enabled)}
                         Divider()
                         DisclosureGroup("Read metadata (\(item.metadata.tags.count) fields)") {

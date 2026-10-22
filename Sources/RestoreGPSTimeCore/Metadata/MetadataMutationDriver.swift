@@ -16,6 +16,7 @@ public actor MetadataMutationDriver:MutationDriver {
             guard mutation.outputKind == .xmpSidecar,!before.tags.keys.contains(where:{$0.hasPrefix("XMP-") && $0 != "XMP-x:XMPToolkit"}) else {throw RestoreError(.unsupported,"The XMP write profile accepts only new, empty sidecar stages.")}
         }
         guard before.diagnostics.isEmpty else {throw RestoreError(.unsupported,"This metadata layout has backend diagnostics and remains read-only: "+before.diagnostics.joined(separator:"; "))}
+        try before.requireQualifiedLayout()
         if mutation.stripMetadata {
             try MetadataStripProfiles().validateStrip(profile:mutation.profile);try MetadataStripProfiles().qualifyStrip(document:before)
             guard mutation.tags.isEmpty,mutation.dates?.embeddedDate==nil else {throw RestoreError(.invalidInput,"Stripping cannot also add embedded metadata.")}
@@ -62,6 +63,7 @@ public actor MetadataMutationDriver:MutationDriver {
         return tags
     }
     static func verifyDiff(before:MetadataDocument,after:MetadataDocument,tags:[TagMutation],stripping:Bool) throws {
+        try after.requireQualifiedLayout()
         let registry=TagRegistry()
         var selected=Set<String>()
         for mutation in tags {
@@ -72,13 +74,18 @@ public actor MetadataMutationDriver:MutationDriver {
         }
         let generated:Set<String>=["XMP-x:XMPToolkit","ExifIFD:ExifVersion","ExifIFD:FlashpixVersion"]
         let offsets:Set<String>=["QuickTime:MediaDataOffset","QuickTime:MediaDataSize","QuickTime:MovieDataOffset","QuickTime:MovieDataSize","IFD0:StripOffsets","IFD0:TileOffsets","IFD1:ThumbnailOffset"]
-        for key in Set(before.tags.keys).union(after.tags.keys) where before.tags[key] != after.tags[key] {
+        let keys=Set(before.tags.keys).union(after.tags.keys).union(before.copyEvidence?.keys.map {$0} ?? []).union(after.copyEvidence?.keys.map {$0} ?? [])
+        for key in keys where try !MetadataDocument.sameValues(before.values(for:key),after.values(for:key)) {
             if ["File:","System:","Composite:","ExifTool:"].contains(where:{key.hasPrefix($0)}) || selected.contains(key) || offsets.contains(key) {continue}
             if key=="XMP-x:XMPToolkit" {continue}
+            if before.profile.identifier=="WEBP" && after.profile.identifier=="WEBP" && ["RIFF:ImageWidth","RIFF:ImageHeight"].contains(key) {
+                let values=before.values(for:key)+after.values(for:key)
+                if let first=values.first,values.allSatisfy({$0==first}) {continue}
+            }
             if before.profile.identifier=="WEBP" && after.profile.identifier=="WEBP" && key=="RIFF:WebP_Flags" {continue} // All rendering feature bits are covered by webp-chunks-v1.
             if before.profile.family == .video && key=="QuickTime:HandlerType" {
                 let metadataHandlers:Set<String>=["mdir","mdta"]
-                if [before.tags[key],after.tags[key]].compactMap({$0}).allSatisfy({metadataHandlers.contains($0.text)}) {continue}
+                if (before.values(for:key)+after.values(for:key)).allSatisfy({metadataHandlers.contains($0.text)}) {continue}
             } // Creating/removing a container metadata directory may change its metadata handler; track handlers are protected by the media validator.
             if generated.contains(key),before.tags[key]==nil {continue}
             if key=="Photoshop:IPTCDigest" {continue}

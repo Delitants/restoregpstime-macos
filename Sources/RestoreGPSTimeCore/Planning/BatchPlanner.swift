@@ -157,6 +157,7 @@ public struct BatchPlanner:Sendable {
     static func qualifyMetadata(_ mutation:MutationPlan,document:MetadataDocument,source:FileSnapshot) async throws {
         guard mutation.changesContent else {return}
         guard source.kind == .regular,document.diagnostics.isEmpty else {throw RestoreError(.unsupported,"Embedded metadata changes require an available ordinary file without metadata diagnostics.")}
+        try document.requireQualifiedLayout()
         if mutation.profile.identifier=="XMP",mutation.outputKind != .xmpSidecar {throw RestoreError(.unsupported,"XMP writing is qualified for newly generated sidecars. Existing sidecars remain read-only.")}
         if mutation.stripMetadata {try MetadataStripProfiles().validateStrip(profile:mutation.profile);try MetadataStripProfiles().qualifyStrip(document:document)}
         try TagRegistry().validate(MetadataMutationDriver.expandedTags(mutation,document:document),profile:mutation.profile)

@@ -33,15 +33,19 @@ public actor ExifToolWriter {
                 if case .array(let list)=expected,list.isEmpty,actual==nil {continue}
                 guard let actual else {throw RestoreError(.verificationFailed,"The selected field was not written: \(id.rawValue).")}
                 let (_,type)=try registry.definition(id)
-                let matches:Bool
-                if type=="date",let a=try? WallClockParser().parse(actual.text),let b=try? WallClockParser().parse(expected.text) {matches=a.year==b.year && a.month==b.month && a.day==b.day && a.hour==b.hour && a.minute==b.minute && a.second==b.second && abs(a.fraction-b.fraction)<0.000000001 && a.explicitOffset==b.explicitOffset}
-                else if ["latitude","longitude","number","rating","altitudeRef"].contains(type),let a=actual.double,let b=expected.double {matches=abs(a-b)<0.0000001}
-                else if type=="list" {matches=actual==expected}
-                else {matches=actual.text==expected.text}
+                let matches=Self.matchesReadBack(actual,expected,type:type)
                 guard matches else {throw RestoreError(.verificationFailed,"Read-back differs from the selected value: \(id.rawValue).")}
             }
         }
         return after
+    }
+    static func matchesReadBack(_ actual:TagValue,_ expected:TagValue,type:String)->Bool {
+        let matches:Bool
+        if type=="date",let a=try? WallClockParser().parse(actual.text),let b=try? WallClockParser().parse(expected.text) {matches=a.year==b.year && a.month==b.month && a.day==b.day && a.hour==b.hour && a.minute==b.minute && a.second==b.second && a.nanoseconds==b.nanoseconds && a.explicitOffset==b.explicitOffset}
+        else if ["latitude","longitude","number","rating","altitudeRef"].contains(type),let a=actual.double,let b=expected.double {matches=abs(a-b)<0.0000001}
+        else if type=="list" {matches=actual==expected}
+        else {matches=actual.text==expected.text}
+        return matches
     }
     private func argument(tag:String,operation:String,text:String,stage:URL) throws -> String {
         if text.utf8.count<=4096 {return "-\(tag)\(operation)\(text)"}

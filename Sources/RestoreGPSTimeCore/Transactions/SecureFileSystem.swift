@@ -89,7 +89,7 @@ enum SecureFS {
     }
     static func matches(_ actual:SourceFingerprint,_ expected:SourceFingerprint,ignoreChangeTime:Bool=false,flags:UInt32?=nil)->Bool {
         let a=actual.snapshot,b=expected.snapshot
-        return actual.contentHash==expected.contentHash && a.id.physicalKey==b.id.physicalKey && a.id.size==b.id.size && a.kind==b.kind && datesEqual(a,b) && a.flags==(flags ?? b.flags) && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText && (ignoreChangeTime || FileTimestamp.matches(a.id.changedTimestamp,b.id.changedTimestamp,date:a.id.changed,expectedDate:b.id.changed))
+        return actual.contentHash==expected.contentHash && a.id.physicalKey==b.id.physicalKey && a.id.size==b.id.size && a.kind==b.kind && (a.kind != .regular || a.id.linkCount==b.id.linkCount) && datesEqual(a,b) && a.flags==(flags ?? b.flags) && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText && (ignoreChangeTime || FileTimestamp.matches(a.id.changedTimestamp,b.id.changedTimestamp,date:a.id.changed,expectedDate:b.id.changed))
     }
     static func attributesEqual(_ a:FileSnapshot,_ b:FileSnapshot,flags:UInt32?=nil)->Bool {
         datesEqual(a,b) && a.kind==b.kind && a.flags==(flags ?? b.flags) && a.permissions==b.permissions && a.ownerID==b.ownerID && a.groupID==b.groupID && a.xattrHashes==b.xattrHashes && a.aclText==b.aclText

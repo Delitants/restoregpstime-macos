@@ -6,9 +6,11 @@ import CryptoKit
 
 struct VideoIntegrity {
     func signature(at url:URL,profile:String) async throws -> MediaIntegritySignature {
+        let localStructure=try VideoContainerPreflight().signature(at:url)
         let asset=AVURLAsset(url:url),tracks=try await asset.load(.tracks)
         guard !tracks.isEmpty,tracks.count<=64 else {throw RestoreError(.unsupported,"Video track count is outside the qualified profile.")}
         var payload=SHA256(),structure=SHA256(),totalBytes=0,totalSamples=0
+        structure.field(localStructure)
         structure.field("asset-duration");time(try await asset.load(.duration),into:&structure)
         for track in tracks.sorted(by:{$0.trackID<$1.trackID}) {
             try Task.checkCancellation()

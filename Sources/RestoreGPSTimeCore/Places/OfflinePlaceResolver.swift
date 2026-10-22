@@ -60,6 +60,8 @@ public actor OfflinePlaceResolver {
 
 public enum MetadataCoordinates {
     public static func read(_ document:MetadataDocument) throws -> (Double,Double) {
+        let coordinateFields:Set<String>=["GPSLatitude","GPSLongitude","GPSLatitudeRef","GPSLongitudeRef","GPSCoordinates","GPSPosition","LocationISO6709"]
+        guard !document.ambiguousIdentifiers.contains(where:{coordinateFields.contains(String($0.split(separator:":").last ?? ""))}) else {throw RestoreError(.conflict,"Conflicting copies of GPS coordinates are present. Choose a manual place or correct the coordinates.")}
         var pairs=[(Double,Double)]()
         for group in ["GPS","Composite","XMP-exif"] {
             let latValue=document.tags[group+":GPSLatitude"],lonValue=document.tags[group+":GPSLongitude"]

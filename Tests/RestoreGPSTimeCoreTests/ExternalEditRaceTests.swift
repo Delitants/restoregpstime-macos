@@ -27,6 +27,18 @@ final class ExternalEditRaceTests:TransactionTestCase {
         XCTAssertTrue(separate.isComplete,separate.conflicts.joined(separator:"\n"))
         for url in held {XCTAssertEqual(try Data(contentsOf:url),newer,"Separate recovery cannot move or replace newer work.")}
     }
+    func testHardlinkCreatedAtSwapGapBlocksCommitAndStaleRecovery() async throws {
+        let input=try item("hardlink/a.HEIC"),plan=try await transactionPlan([input]),faults=TransactionFaults()
+        let alias=workspace.appendingPathComponent("external-alias.HEIC")
+        faults.callback={point in if point == .persistedStep(.swapPending,index:0) {try FileManager.default.linkItem(at:input.snapshot.url,to:alias)}}
+        let original=try Data(contentsOf:input.snapshot.url),report=try await requireReport(plan,faults:faults)
+        XCTAssertEqual(report.results.first?.status,.recoveryNeeded)
+        XCTAssertEqual(try Data(contentsOf:alias),original)
+        let outcome=try await RecoveryCoordinator(root:recoveryRoot,driver:TransactionTestDriver()).restore(batchID:plan.id,choice:.originalLocations)
+        XCTAssertFalse(outcome.isComplete)
+        let record=try XCTUnwrap(RecoveryJournal(root:recoveryRoot,batchID:plan.id).records().first)
+        XCTAssertFalse(record.members.contains(where:\.restored))
+    }
     func testEditAndReplacementAtSwapPendingBlockStaleVaultRestore() async throws {
         for atomic in [false,true] {
             let input=try item("swap-\(atomic)/a.HEIC"),plan=try await transactionPlan([input]),faults=TransactionFaults()

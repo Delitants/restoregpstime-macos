@@ -16,14 +16,14 @@ public struct CaptureDateResolver {
         }
         var warnings=[String]()
         for tag in tags {
-            guard let raw=document.tags[tag]?.text,!raw.isEmpty else { continue }
+            guard let raw=try document.readValue(tag)?.text,!raw.isEmpty else { continue }
             do {
                 let parsed=try WallClockParser().parse(raw)
                 var offset=parsed.explicitOffset,fraction=parsed.fraction,precision=parsed.fractionalPrecision,nanoseconds=parsed.nanoseconds
                 if tag.hasPrefix("ExifIFD:") || tag.hasPrefix("IFD0:") {
                     let suffix=tag.hasSuffix(":DateTimeOriginal") ? "Original" : (tag.hasSuffix(":CreateDate") ? "Digitized":"")
-                    if offset==nil,let text=document.tags["ExifIFD:OffsetTime"+suffix]?.text { offset=try WallClockParser().parseOffset(text) }
-                    if precision==0,let text=document.tags["ExifIFD:SubSecTime"+suffix]?.text,!text.isEmpty {
+                    if offset==nil,let text=try document.readValue("ExifIFD:OffsetTime"+suffix)?.text { offset=try WallClockParser().parseOffset(text) }
+                    if precision==0,let text=try document.readValue("ExifIFD:SubSecTime"+suffix)?.text,!text.isEmpty {
                         guard text.range(of:#"^\d{1,9}$"#,options:.regularExpression) != nil else { throw RestoreError(.invalidInput,"Invalid fractional capture seconds.") }
                         fraction=Double("0."+text)!;precision=text.count;nanoseconds=Int32(text+String(repeating:"0",count:9-text.count))
                     }

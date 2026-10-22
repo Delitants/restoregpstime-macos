@@ -13,7 +13,7 @@ public actor MetadataReader {
         let outcome:Result<MetadataDocument,Error>
         do {
             if Task.isCancelled { throw RestoreError(.cancelled,"Metadata inspection cancelled.") }
-            let args=["-j","-G1","-a","-s","-n","-struct","-charset","filename=UTF8","-api","LargeFileSupport=1","--",snapshot.url.path]
+            let args=["-j","-G1:4","-a","-s","-n","-struct","-charset","filename=UTF8","-api","LargeFileSupport=1","--",snapshot.url.path]
             let result=try await ProcessRunner().run(executable:paths.perl,arguments:paths.exifArguments(args),environment:paths.environment,timeout:60)
             let document=try MetadataDecoder().decode(result.stdout)
             if result.exitStatus != 0 && document.diagnostics.isEmpty { throw RestoreError(.processFailed,String(decoding:result.stderr,as:UTF8.self)) }
