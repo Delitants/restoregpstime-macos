@@ -61,12 +61,12 @@ public struct Committer:Sendable {
             try SecureFS.applyMetadata(expected.snapshot,from:stage,to:target)
         } else if inPlace && source.path==target.path {
             try persist(.swapPending);try SecureFS.rename(stage,target,swap:true);try persist(.swapped)
-            let held=try reader.fingerprint(at:stage)
-            guard SecureFS.matches(held,item.source,ignoreChangeTime:true,flags:item.source.snapshot.flags & ~UInt32(UF_IMMUTABLE)) else {throw RestoreError(.recoveryNeeded,"The exchanged original differs from preview; retained evidence needs recovery.")}
+            try HeldOriginalVerifier.require(stage,member:record.members[index])
         } else {
             let caseOnly=inPlace && item.name.needsTemporaryRename
             if caseOnly {
                 try persist(.retirePending);try SecureFS.rename(source,record.members[index].heldOriginalURL!);try persist(.retired)
+                try HeldOriginalVerifier.require(record.members[index].heldOriginalURL!,member:record.members[index])
             }
             try persist(.publishPending);try SecureFS.rename(stage,target);try persist(.published)
             if inPlace && !caseOnly {
@@ -74,6 +74,7 @@ public struct Committer:Sendable {
                 let current=try reader.fingerprint(at:source)
                 guard SecureFS.matches(current,item.source,ignoreChangeTime:item.source.snapshot.isLocked,flags:item.source.snapshot.flags & ~UInt32(UF_IMMUTABLE)) else {throw RestoreError(.conflict,"The source changed while publishing its new name.")}
                 try persist(.retirePending);try SecureFS.rename(source,record.members[index].heldOriginalURL!);try persist(.retired)
+                try HeldOriginalVerifier.require(record.members[index].heldOriginalURL!,member:record.members[index])
             }
         }
         var flags=expected.snapshot.flags

@@ -77,12 +77,17 @@ public struct RecoveryCoordinator:Sendable {
             let current=try reader.fingerprint(at:source)
             if SecureFS.matches(current,restored,ignoreChangeTime:true,flags:member.item.source.snapshot.flags) || SecureFS.matches(current,restored,ignoreChangeTime:true) {return .restored}
         }
+        try HeldOriginalVerifier.validateRecovery(member,record:record)
         if record.options.mode == .modifyInPlace && member.item.mutation.outputKind == .sourceCopy && SecureFS.exists(source) {
             let current=try reader.fingerprint(at:source)
             let originalMatches=SecureFS.matches(current,member.item.source) || (member.item.mutation.explicitlyUnlocks && member.item.source.snapshot.isLocked && member.step != .pending && SecureFS.matches(current,member.item.source,ignoreChangeTime:true,flags:member.item.source.snapshot.flags & ~UInt32(UF_IMMUTABLE)))
             if originalMatches {
                 if source.path != target.path,let expected=member.staged,SecureFS.exists(target),SecureFS.matches(try reader.fingerprint(at:target),expected,ignoreChangeTime:true,flags:finalFlags(member)) {return .duplicate}
                 return .untouched
+            }
+            if source.path != target.path {
+                let caseAlias=member.item.name.needsTemporaryRename && member.staged.map {current.snapshot.id.physicalKey==$0.snapshot.id.physicalKey}==true
+                guard caseAlias else {throw RestoreError(.conflict,"Recovery found a newer or unrecognized source at "+source.path+". No member of this group will be restored over it.")}
             }
         }
         if SecureFS.exists(target) {
