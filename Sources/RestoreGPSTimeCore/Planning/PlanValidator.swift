@@ -28,7 +28,7 @@ public struct PlanValidator:Sendable {
                 do {
                     guard let anchor=item.destinationAnchor else {throw RestoreError(.conflict,"Missing destination identity.")}
                     let current=try reader.snapshot(at:anchor.requestedURL)
-                    guard current.kind == .directory,current.id.physicalKey==anchor.identity.physicalKey,current.id.volumeID==anchor.identity.volumeID,anchor.requestedURL.resolvingSymlinksInPath().path==anchor.resolvedURL.path else {throw RestoreError(.conflict,"The destination parent or volume changed.")}
+                    guard current.kind == .directory,current.id.physicalKey==anchor.identity.physicalKey,current.id.volumeID==anchor.identity.volumeID,(try FileSystemPath.canonicalDirectory(anchor.requestedURL)).path==anchor.resolvedURL.path else {throw RestoreError(.conflict,"The destination parent or volume changed.")}
                     let parent=item.name.finalURL.deletingLastPathComponent()
                     let rules=try VolumeNamingRules.detect(at:anchor.requestedURL),key=rules.collisionKey(item.name.finalURL.path)
                     guard destinations.insert(key).inserted else {throw RestoreError(.conflict,"Two items reserve the same destination.")}

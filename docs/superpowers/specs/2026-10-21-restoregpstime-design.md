@@ -77,7 +77,7 @@ The native app is architecture-specific. ExifTool's Perl code/data is interprete
 All persisted records below are versioned `Codable` values; plan/journal/report schema version starts at `1`.
 
 - `SourceID`: volume identity, device/inode, resolved regular-file identity, size, modification time, change time and link count. The discovery record also carries original URL and display path.
-- `FileSnapshot`: `SourceID`, filesystem dates, POSIX mode, ACL/xattr inventory, lock/hidden-extension/Finder data, file kind, availability and read errors.
+- `FileSnapshot`: `SourceID`, filesystem dates, POSIX mode and owner/group IDs, ACL/xattr inventory, lock/hidden-extension/Finder data, file kind, availability and read errors.
 - `MetadataDocument`: group-qualified tags and values, detected container, capture candidates, coordinates, linked-asset identifiers and backend diagnostics. Duplicate tag names retain group provenance.
 - `CaptureCandidate`: tag, original string, parsed wall clock, fractional precision, explicit offset if present and candidate kind. An unzoned wall clock is not a resolved instant.
 - `DatePolicy`: source choice, fallback order, missing-zone selection, QuickTime interpretation, target fields, fixed-duration shift and optional sequence start/step.
@@ -189,7 +189,7 @@ Before the first change to a group, finish and hash-verify retained originals fo
 
 Revalidate identity, content hash and attributes against preview immediately before mutation. Use a staged independent regular file on the target volume; the metadata helper never writes a user source path. Coordinate file access and use descriptor-relative identity checks and no-replace/exchange primitives as applicable. Concurrent external changes cause a conflict; do not claim protection from a hostile concurrent writer or silently retry against changed inputs.
 
-Persist journal phases `prepared → backedUp → staged → verified → committing → committed`, or `failed`, `cancelled`, `recoveryNeeded`, `restored`. Flush each phase before its corresponding externally visible mutation. Write manifests atomically and sync them; a failure to persist recovery state stops the commit. A normal path replacement is atomic where the volume supports it. Renames and multi-member groups require journaled steps and recovery, rather than a fictitious whole-batch atomic guarantee.
+Persist journal phases `prepared → backedUp → staged → verified → committing → committed`, or `failed`, `cancelled`, `recoveryNeeded`, `restoring`, `restored`. Flush each phase before its corresponding externally visible mutation. Write manifests atomically and sync them; a failure to persist recovery state stops the commit. A normal path replacement is atomic where the volume supports it. Renames and multi-member groups require journaled steps and recovery, rather than a fictitious whole-batch atomic guarantee.
 
 After mutation, verify tags/payloads as required, apply final filesystem dates/flags, and read them back. A post-commit verification failure is **recovery needed**, never success. Attempt group restoration only when expected post-operation identities/hashes still match; retain conflicts for user-directed resolution. Preserve the original state as recoverable evidence even if automatic restoration succeeds.
 

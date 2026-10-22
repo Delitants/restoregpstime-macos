@@ -20,6 +20,7 @@ public struct FileSnapshot: Codable, Equatable, Sendable {
     public let modificationDate: Date
     public let flags: UInt32
     public let permissions: UInt16
+    public let ownerID:UInt32,groupID:UInt32
     public let xattrHashes: [String:ContentHash]
     public let finderInfo: Data?
     public let aclText: String?

@@ -16,6 +16,14 @@ public struct BatchPlanner:Sendable {
         if request.removeGPS && request.location != nil {throw RestoreError(.invalidInput,"Choose either location output or location removal in one batch.")}
         if request.stripMetadata && (!request.tags.isEmpty || request.location != nil || request.dates?.embeddedDateRequested == true) {throw RestoreError(.invalidInput,"Metadata stripping cannot be combined with metadata additions.")}
         if options.mode == .saveCopies && options.outputRoot == nil {throw RestoreError(.invalidInput,"Choose the Save Copies folder.")}
+        let selectedDirectories=items.filter {$0.snapshot.kind == .directory}
+        for root in [options.mode == .saveCopies ? options.outputRoot:nil,options.recoveryRoot].compactMap({$0}) {
+            var status=stat()
+            if lstat(root.path,&status) != 0,errno==ENOENT {
+                let parent=try FileIdentityReader().snapshot(at:Self.existingParent(of:root))
+                if selectedDirectories.contains(where:{$0.snapshot.id.physicalKey==parent.id.physicalKey}) {throw RestoreError(.conflict,"Creating the output or recovery folder here would change a selected source directory. Choose an existing folder or another parent.")}
+            }
+        }
         let identityReader=FileIdentityReader(),capabilities=CapabilityRegistry()
         var resolved=[InspectedItem](),errors=[String:[String]](),dateErrors=[String:String](),fingerprints=[String:SourceFingerprint]()
         for var item in items {
@@ -154,7 +162,7 @@ public struct BatchPlanner:Sendable {
     static func anchor(for target:URL) throws -> DestinationAnchor {
         let parent=try existingParent(of:target.deletingLastPathComponent()),snapshot=try FileIdentityReader().snapshot(at:parent)
         guard snapshot.kind == .directory else {throw RestoreError(.conflict,"The destination parent is linked, unavailable or not a directory.")}
-        return .init(requestedURL:parent,resolvedURL:parent.resolvingSymlinksInPath(),identity:snapshot.id)
+        return .init(requestedURL:parent,resolvedURL:try FileSystemPath.canonicalDirectory(parent),identity:snapshot.id)
     }
 }
 private extension DatePolicy {var embeddedDateRequested:Bool {targets.contains(.capture)}}

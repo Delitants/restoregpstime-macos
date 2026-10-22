@@ -69,6 +69,13 @@ final class BatchPlannerTests:PlanningTestCase {
         XCTAssertEqual(plan.eligibleGroups.count,1);XCTAssertEqual(plan.groups.filter {$0.eligibility == .blocked}.count,1)
         XCTAssertEqual(Set(plan.groups.flatMap(\.items).map {$0.name.finalURL.path}).count,2)
     }
+    func testNewOutputCannotChangeSelectedSourceDirectory() async throws {
+        let file=try item("source/a.HEIC"),folder=file.snapshot.url.deletingLastPathComponent()
+        let selected=InspectedItem(snapshot:try FileIdentityReader().snapshot(at:folder),metadata:MetadataDocument(tags:[:]))
+        var settings=try options();settings.outputRoot=folder.appendingPathComponent("new-output")
+        do {_ = try await planner().preview(items:[selected,file],request:OperationRequest(),options:settings);XCTFail("Creating this output would change an imported directory")} catch let error as RestoreError {XCTAssertEqual(error.code,.conflict)}
+        XCTAssertFalse(FileManager.default.fileExists(atPath:try XCTUnwrap(settings.outputRoot).path))
+    }
     func testTrashCannotCombineWithOtherMutations() async throws {
         var request=OperationRequest();request.trashHiddenFiles=true;request.removeGPS=true
         do {_ = try await preview(item("a.HEIC"),request:request,mode:.modifyInPlace);XCTFail("Combined Trash must fail")} catch let error as RestoreError {XCTAssertEqual(error.code,.invalidInput)}

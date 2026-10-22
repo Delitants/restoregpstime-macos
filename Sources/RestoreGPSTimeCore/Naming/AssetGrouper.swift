@@ -12,7 +12,7 @@ public struct AssetGrouper {
             assigned.formUnion(members.map {$0.snapshot.id.physicalKey})
         }
         for keys in overrides.forcedGroups {
-            guard keys.count>1,Set(keys).count==keys.count,keys.allSatisfy({unique[$0] != nil && !assigned.contains($0) && !overrides.unlinkedSourceKeys.contains($0)}) else { throw RestoreError(.invalidInput,"Explicit asset groups contain unknown, duplicate, or unlinked files.") }
+            guard keys.count>1,Set(keys).count==keys.count,keys.allSatisfy({unique[$0]?.snapshot.kind == .regular && !assigned.contains($0) && !overrides.unlinkedSourceKeys.contains($0)}) else { throw RestoreError(.invalidInput,"Explicit asset groups require ordinary files and cannot contain unknown, duplicate, or unlinked files.") }
             append(keys.compactMap {unique[$0]}.sorted {$0.snapshot.url.path < $1.snapshot.url.path},"Explicit user grouping")
         }
         let idTags=["Apple:ContentIdentifier","Keys:ContentIdentifier","QuickTime:ContentIdentifier","XMP-apple-fi:ContentIdentifier"]
