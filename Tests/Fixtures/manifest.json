@@ -1,43 +1,64 @@
 {
-  "expectedCaptureInstant" : "2024-01-02T01:04:05Z",
-  "expectedCountryCode" : "FR",
-  "fixtures" : [
+  "expectedCaptureInstant": "2024-01-02T01:04:05Z",
+  "expectedCountryCode": "FR",
+  "fixtures": [
     {
-      "container" : "public.jpeg",
-      "id" : "paris.jpg",
-      "license" : "MIT",
-      "origin" : "Generated geometric image; synthetic Paris GPS; no personal media",
-      "sha256" : "0eafc7d04d547a778627fd7dc9bd7d2891115bc2a07281c0568b07e26c92472b"
+      "container": "public.jpeg",
+      "id": "paris.jpg",
+      "license": "MIT",
+      "origin": "Generated geometric image; synthetic Paris GPS; no personal media",
+      "sha256": "0eafc7d04d547a778627fd7dc9bd7d2891115bc2a07281c0568b07e26c92472b"
     },
     {
-      "container" : "public.heic",
-      "id" : "paris.heic",
-      "license" : "MIT",
-      "origin" : "Generated geometric image; synthetic Paris GPS; no personal media",
-      "sha256" : "742c53680e273f58984a578a876e29d995e01540a5e87ecc08f713ae2bb45f71"
+      "container": "public.heic",
+      "id": "paris.heic",
+      "license": "MIT",
+      "origin": "Generated geometric image; synthetic Paris GPS; no personal media",
+      "sha256": "742c53680e273f58984a578a876e29d995e01540a5e87ecc08f713ae2bb45f71"
     },
     {
-      "container" : "public.tiff",
-      "id" : "paris.tiff",
-      "license" : "MIT",
-      "origin" : "Generated geometric image; synthetic Paris GPS; no personal media",
-      "sha256" : "677b11b76779a8044affe986b9957a0480f3c8659c57d76826739d41b86acdbe"
+      "container": "public.tiff",
+      "id": "paris.tiff",
+      "license": "MIT",
+      "origin": "Generated geometric image; synthetic Paris GPS; no personal media",
+      "sha256": "677b11b76779a8044affe986b9957a0480f3c8659c57d76826739d41b86acdbe"
     },
     {
-      "container" : "public.png",
-      "id" : "paris.png",
-      "license" : "MIT",
-      "origin" : "Generated geometric image; synthetic Paris GPS; no personal media",
-      "sha256" : "47ed21d9b7691bf7cbfc79d2625d9ca6dbac19f84e9946a344f694fdbbd450a1"
+      "container": "public.png",
+      "id": "paris.png",
+      "license": "MIT",
+      "origin": "Generated geometric image; synthetic Paris GPS; no personal media",
+      "sha256": "47ed21d9b7691bf7cbfc79d2625d9ca6dbac19f84e9946a344f694fdbbd450a1"
     },
     {
-      "container" : "MOV",
-      "id" : "paris.mov",
-      "license" : "MIT",
-      "origin" : "Generated two-frame H264 movie; synthetic Paris GPS; no personal media",
-      "sha256" : "a39b066dabcbf26f19924f863fea552fc241555afc81b8d86b5be4f8c90bd199"
+      "container": "MOV",
+      "id": "paris.mov",
+      "license": "MIT",
+      "origin": "Generated two-frame H264 movie; synthetic Paris GPS; no personal media",
+      "sha256": "a39b066dabcbf26f19924f863fea552fc241555afc81b8d86b5be4f8c90bd199"
+    },
+    {
+      "container": "image/webp",
+      "id": "geometric-baseline.webp",
+      "license": "MIT",
+      "origin": "Generated geometric PNG encoded by Pillow 12.3.0 and libwebp 1.6.0; lossless, no personal media",
+      "sha256": "1efe05933a07da31a2f77bf02346131ce901af55c462f9e7721b7504fafbcd82"
+    },
+    {
+      "container": "image/avif",
+      "id": "geometric-baseline.avif",
+      "license": "MIT",
+      "origin": "Generated geometric PNG encoded by FFmpeg 8.1.2 and SVT-AV1; 8-bit baseline, no personal media",
+      "sha256": "949f45dd8a5a6b90d69f270c8a7dae24f6346e6bc43f1c1351d69b46f207dd6f"
+    },
+    {
+      "container": "video/mp4",
+      "id": "geometric-baseline.mp4",
+      "license": "MIT",
+      "origin": "Generated two-frame MOV remuxed by FFmpeg 8.1.2 without re-encoding; no personal media",
+      "sha256": "8e02fb355bff02f2428875941cf861c763b2fca2043d5b530b886a58f6fc9856"
     }
   ],
-  "note" : "Synthetic baseline fixtures do not qualify genuine Apple HDR\/depth\/Live Photo or camera RAW variants.",
-  "schema" : 1
+  "note": "Synthetic baseline fixtures do not qualify genuine Apple HDR/depth/Live Photo or camera RAW variants.",
+  "schema": 1
 }

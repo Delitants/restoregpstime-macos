@@ -1,12 +1,15 @@
 {
   "schema": 1,
   "profiles": {
-    "JPEG": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
-    "HEIC": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
-    "HEIF": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
-    "TIFF": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
-    "PNG": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
-    "MOV": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
-    "MP4": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false}
+    "JPEG": {"embeddedWrite": true, "removeGPS": true, "stripMetadata": true},
+    "HEIC": {"embeddedWrite": true, "removeGPS": true, "stripMetadata": false},
+    "HEIF": {"embeddedWrite": true, "removeGPS": true, "stripMetadata": false},
+    "TIFF": {"embeddedWrite": true, "removeGPS": true, "stripMetadata": false},
+    "PNG": {"embeddedWrite": true, "removeGPS": true, "stripMetadata": false},
+    "WEBP": {"embeddedWrite": true, "removeGPS": true, "stripMetadata": false},
+    "AVIF": {"embeddedWrite": true, "removeGPS": true, "stripMetadata": false},
+    "MOV": {"embeddedWrite": true, "removeGPS": true, "stripMetadata": false},
+    "MP4": {"embeddedWrite": true, "removeGPS": true, "stripMetadata": false},
+    "XMP": {"embeddedWrite": true, "removeGPS": false, "stripMetadata": false}
   }
 }

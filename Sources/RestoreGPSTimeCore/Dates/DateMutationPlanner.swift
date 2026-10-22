@@ -15,6 +15,21 @@ public struct DateMutationPlanner {
             if creation != nil { modification=creation;notes.append("Modification date normalized to creation date.") }
             else { creation=modification;notes.append("Creation date normalized to modification date.") }
         }
-        return .init(creationDate:creation,modificationDate:modification,embeddedDate:policy.targets.contains(.capture) && !policy.removeEmbeddedDates ? final:nil,embeddedOffsetSeconds:resolution.offsetSeconds,removeEmbeddedDates:policy.removeEmbeddedDates,notes:notes)
+        var embeddedOffset=resolution.offsetSeconds
+        if policy.targets.contains(.capture) && !policy.removeEmbeddedDates {
+            let absoluteSource:Bool
+            switch policy.source {case .automaticCapture,.tag,.filename,.referenceFile(.capture):absoluteSource=false;default:absoluteSource=true}
+            if absoluteSource {
+                if let offset=policy.fixedOffsetSeconds {
+                    guard (-64800...64800).contains(offset) else {throw RestoreError(.invalidInput,"The selected output offset is out of range.")}
+                    embeddedOffset=offset
+                } else if let identifier=policy.timeZoneID {
+                    guard let zone=TimeZone(identifier:identifier) else {throw RestoreError(.invalidInput,"Unknown output timezone.")}
+                    embeddedOffset=zone.secondsFromGMT(for:final)
+                }
+            }
+        }
+        let precision=max(resolution.fractionalPrecision,CaptureDateResolver.fractionalPrecision(final.timeIntervalSince1970))
+        return .init(creationDate:creation,modificationDate:modification,embeddedDate:policy.targets.contains(.capture) && !policy.removeEmbeddedDates ? final:nil,embeddedPrecision:precision,embeddedOffsetSeconds:embeddedOffset,removeEmbeddedDates:policy.targets.contains(.capture) && policy.removeEmbeddedDates,notes:notes)
     }
 }

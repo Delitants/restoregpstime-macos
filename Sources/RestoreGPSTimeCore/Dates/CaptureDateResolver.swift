@@ -37,6 +37,16 @@ public struct CaptureDateResolver {
         throw RestoreError(.missingMetadata,"No valid date was found for the selected source. "+warnings.joined(separator:" "))
     }
     static func instant(_ date:Date,source:String,warnings:[String]=[]) -> DateResolution {
-        .init(source:source,original:ISO8601DateFormatter().string(from:date),instant:date,offsetSeconds:0,fractionalPrecision:0,interpretation:"Existing absolute instant",warnings:warnings)
+        .init(source:source,original:ISO8601DateFormatter().string(from:date),instant:date,offsetSeconds:0,fractionalPrecision:fractionalPrecision(date.timeIntervalSince1970),interpretation:"Existing absolute instant",warnings:warnings)
+    }
+    static func fractionalPrecision(_ seconds:Double)->Int {
+        let fraction=seconds-floor(seconds)
+        if fraction==0 {return 0}
+        // Date uses binary floating point. Permit its ULP when inferring a decimal precision.
+        for digits in 1...9 {
+            let scale=pow(10,Double(digits))
+            if abs(fraction-(fraction*scale).rounded()/scale)<=max(seconds.ulp*2,0.0000000005) {return digits}
+        }
+        return 9
     }
 }

@@ -116,8 +116,9 @@ public struct BatchPlanner:Sendable {
                 var anchor:DestinationAnchor?
                 do {anchor=try Self.anchor(for:name.finalURL)} catch {reasons.append(error.localizedDescription)}
                 let sourceDates:DateMutation?
-                if metadataSidecar,let change=dateMutation {sourceDates = .init(creationDate:change.creationDate,modificationDate:change.modificationDate,embeddedDate:nil,embeddedOffsetSeconds:change.embeddedOffsetSeconds,removeEmbeddedDates:false,notes:change.notes)} else {sourceDates=dateMutation}
+                if metadataSidecar,let change=dateMutation {sourceDates = .init(creationDate:change.creationDate,modificationDate:change.modificationDate,embeddedDate:nil,embeddedPrecision:change.embeddedPrecision,embeddedOffsetSeconds:change.embeddedOffsetSeconds,removeEmbeddedDates:false,notes:change.notes)} else {sourceDates=dateMutation}
                 let mutation=MutationPlan(dates:sourceDates,tags:metadataSidecar ? []:tags,removeGPS:request.removeGPS,stripMetadata:request.stripMetadata,finder:request.finder,profile:item.metadata.profile,allowedMetadataChanges:.init(tags:metadataSidecar ? []:tagIDs,removesGPS:request.removeGPS,stripsDescriptive:request.stripMetadata))
+                do {try await Self.qualifyMetadata(mutation,document:item.metadata,source:item.snapshot)} catch {reasons.append(error.localizedDescription)}
                 let source=fingerprints[key] ?? .init(snapshot:item.snapshot,contentHash:"")
                 plannedItems.append(.init(source:source,metadata:item.metadata,resolution:item.dateResolution,place:item.place,name:name,mutation:mutation,capabilities:decisions,destinationAnchor:anchor,blockingReasons:reasons))
                 if metadataSidecar {
@@ -129,8 +130,9 @@ public struct BatchPlanner:Sendable {
                     let support=capabilities.decision(for:.embeddedWrite,document:sidecarDocument,snapshot:item.snapshot)
                     if !support.isSupported {sidecarReasons.append(support.reason)}
                     let sidecarName=NameReservation(groupID:group.id,sourceKey:key+":xmp",originalURL:item.snapshot.url,finalURL:target,sequence:name.sequence,wasTruncated:name.wasTruncated,needsTemporaryRename:false,blockingReason:sidecarReasons.first)
-                    let sidecarDates=dateMutation.map {DateMutation(creationDate:nil,modificationDate:nil,embeddedDate:$0.embeddedDate,embeddedOffsetSeconds:$0.embeddedOffsetSeconds,removeEmbeddedDates:$0.removeEmbeddedDates,notes:$0.notes)}
+                    let sidecarDates=dateMutation.map {DateMutation(creationDate:nil,modificationDate:nil,embeddedDate:$0.embeddedDate,embeddedPrecision:$0.embeddedPrecision,embeddedOffsetSeconds:$0.embeddedOffsetSeconds,removeEmbeddedDates:$0.removeEmbeddedDates,notes:$0.notes)}
                     let sidecarMutation=MutationPlan(dates:sidecarDates,tags:tags,outputKind:.xmpSidecar,profile:sidecarDocument.profile,allowedMetadataChanges:.init(tags:tagIDs))
+                    do {try await Self.qualifyMetadata(sidecarMutation,document:sidecarDocument,source:item.snapshot)} catch {sidecarReasons.append(error.localizedDescription)}
                     plannedItems.append(.init(source:source,metadata:sidecarDocument,resolution:item.dateResolution,place:item.place,name:sidecarName,mutation:sidecarMutation,capabilities:["embeddedWrite":support],destinationAnchor:anchor,blockingReasons:sidecarReasons))
                     reasons+=sidecarReasons
                 }
@@ -149,6 +151,14 @@ public struct BatchPlanner:Sendable {
         requestObject["excludedSourceKeys"]=request.excludedSourceKeys.sorted()
         var overrides=requestObject["groups"] as! [String:Any];overrides["unlinkedSourceKeys"]=request.groups.unlinkedSourceKeys.sorted();requestObject["groups"]=overrides;object["request"]=requestObject
         return FileIdentityReader.hash(try JSONSerialization.data(withJSONObject:object,options:[.sortedKeys]))
+    }
+    static func qualifyMetadata(_ mutation:MutationPlan,document:MetadataDocument,source:FileSnapshot) async throws {
+        guard mutation.changesContent else {return}
+        guard source.kind == .regular,document.diagnostics.isEmpty else {throw RestoreError(.unsupported,"Embedded metadata changes require an available ordinary file without metadata diagnostics.")}
+        if mutation.profile.identifier=="XMP",mutation.outputKind != .xmpSidecar {throw RestoreError(.unsupported,"XMP writing is qualified for newly generated sidecars. Existing sidecars remain read-only.")}
+        if mutation.stripMetadata {try MetadataStripProfiles().validateStrip(profile:mutation.profile);try MetadataStripProfiles().qualifyStrip(document:document)}
+        try TagRegistry().validate(MetadataMutationDriver.expandedTags(mutation,document:document),profile:mutation.profile)
+        if mutation.outputKind != .xmpSidecar {_ = try await MediaIntegrityValidator().signature(at:source.url,profile:mutation.profile)}
     }
     static func isWithin(_ url:URL,_ root:URL)->Bool {let path=url.standardizedFileURL.path,base=root.standardizedFileURL.path;return path==base || base=="/" || path.hasPrefix(base+"/")}
     static func existingParent(of url:URL) throws -> URL {

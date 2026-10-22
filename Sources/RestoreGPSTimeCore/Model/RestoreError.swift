@@ -4,7 +4,7 @@ public struct RestoreError: Error, LocalizedError, Codable, Equatable, Sendable 
     public enum Code: String, Codable, Sendable {
         case runtimeUnavailable, invalidInput, processFailed, outputLimit, timeout, cancelled
         case malformedMetadata, unsupported, timezoneRequired, ambiguousTime, nonexistentTime
-        case missingMetadata, conflict, io, verificationFailed, recoveryNeeded
+        case missingMetadata, conflict, io, verificationFailed, recoveryNeeded, incompleteRemoval
     }
     public let code: Code
     public let detail: String

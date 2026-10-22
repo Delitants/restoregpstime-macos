@@ -49,7 +49,7 @@ class TransactionTestCase:PlanningTestCase {
         return try XCTUnwrap(report)
     }
     override func tearDownWithError() throws {
-        if testRun?.hasSucceeded == false,let workspace {
+        if (testRun?.totalFailureCount ?? 0)>0,let workspace {
             let evidence=repository.appendingPathComponent("work/failed-transactions/\(UUID().uuidString)")
             try FileManager.default.createDirectory(at:evidence.deletingLastPathComponent(),withIntermediateDirectories:true)
             try FileManager.default.moveItem(at:workspace,to:evidence)

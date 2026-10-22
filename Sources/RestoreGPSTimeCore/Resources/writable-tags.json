@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "tags": {
+    "ExifIFD:UserComment":"text", "ExifIFD:DateTimeOriginal":"date", "ExifIFD:CreateDate":"date", "IFD0:ModifyDate":"date",
+    "ExifIFD:OffsetTimeOriginal":"offset", "ExifIFD:OffsetTimeDigitized":"offset", "ExifIFD:OffsetTime":"offset",
+    "ExifIFD:SubSecTimeOriginal":"digits", "ExifIFD:SubSecTimeDigitized":"digits", "ExifIFD:SubSecTime":"digits",
+    "IFD0:ImageDescription":"text", "IFD0:Artist":"text", "IFD0:Copyright":"text",
+    "XMP-dc:Description":"language", "XMP-dc:Title":"language", "XMP-dc:Rights":"language", "XMP-dc:Subject":"list", "XMP-dc:Creator":"list",
+    "XMP-photoshop:City":"text", "XMP-photoshop:State":"text", "XMP-photoshop:Country":"text", "XMP-iptcCore:CountryCode":"text",
+    "XMP-photoshop:DateCreated":"date", "XMP-exif:DateTimeOriginal":"date", "XMP-exif:DateTimeDigitized":"date",
+    "XMP-xmp:CreateDate":"date", "XMP-xmp:ModifyDate":"date", "XMP-xmp:MetadataDate":"date", "XMP-xmp:Rating":"rating", "XMP-xmp:Label":"text",
+    "IPTC:Keywords":"list", "IPTC:Caption-Abstract":"text", "IPTC:ObjectName":"text", "IPTC:City":"text", "IPTC:Province-State":"text", "IPTC:Country-PrimaryLocationName":"text", "IPTC:Country-PrimaryLocationCode":"text", "IPTC:By-line":"list", "IPTC:CopyrightNotice":"text",
+    "Keys:Description":"quickTimeLanguage", "Keys:Comment":"quickTimeLanguage", "Keys:Title":"quickTimeLanguage", "Keys:CreationDate":"date",
+    "QuickTime:CreateDate":"date", "QuickTime:ModifyDate":"date", "ItemList:Comment":"quickTimeLanguage", "ItemList:Description":"quickTimeLanguage",
+    "GPS:GPSLatitude":"latitude", "GPS:GPSLongitude":"longitude", "GPS:GPSLatitudeRef":"latitudeRef", "GPS:GPSLongitudeRef":"longitudeRef", "GPS:GPSAltitude":"number", "GPS:GPSAltitudeRef":"altitudeRef",
+    "XMP-exif:GPSLatitude":"latitude", "XMP-exif:GPSLongitude":"longitude", "XMP-exif:GPSAltitude":"number", "Keys:GPSCoordinates":"coordinates", "UserData:GPSCoordinates":"coordinates"
+  }
+}

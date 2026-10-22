@@ -30,6 +30,7 @@ public struct DateMutation:Codable,Equatable,Sendable {
     public var creationDate:Date?
     public var modificationDate:Date?
     public var embeddedDate:Date?
+    public var embeddedPrecision:Int=0
     public var embeddedOffsetSeconds:Int
     public var removeEmbeddedDates:Bool
     public var notes:[String]
