@@ -26,6 +26,13 @@ struct InspectorView:View {
                             if let resolution=plan.resolution {detail("Date source",resolution.source);detail("Original date",resolution.original);detail("Interpretation",resolution.interpretation);ForEach(resolution.warnings,id:\.self) {Text($0).font(.caption).foregroundStyle(.orange)}}
                             if let group=model.plan?.groups.first(where:{$0.id==row.groupID}) {detail("Asset grouping",group.evidence)}
                             if let place=plan.place {detail(place.origin == .manual ? "Manual correction":"Nearby place (approximate)",place.displayName);if let distance=place.distanceKM {Text(String(format:"%.2f km from stored coordinates",distance)).font(.caption)};detail("Database",place.databaseIdentity)}
+                            if let candidates=plan.placeCandidates,candidates.count>1 {
+                                DisclosureGroup("Other nearby places") {
+                                    ForEach(Array(candidates.enumerated()),id:\.offset) {_,candidate in
+                                        Button(candidate.displayName+(candidate.distanceKM.map {String(format:" (%.2f km)",$0)} ?? "")) {model.request.placeOverrides[item.snapshot.id.physicalKey]=candidate}
+                                    }
+                                }
+                            }
                             if let tags=try? MetadataMutationDriver.expandedTags(plan.mutation,document:plan.metadata),!tags.isEmpty {
                                 DisclosureGroup("Actual metadata destinations (\(tags.count))") {
                                     ForEach(Array(tags.enumerated()),id:\.offset) {_,tag in

@@ -2,6 +2,15 @@ import XCTest
 @testable import RestoreGPSTimeCore
 
 final class WorkflowTests:XCTestCase {
+    func testOfflineLookupRadiusAndCandidateLimitAreValidated() throws {
+        for (distance,limit) in [(0.0,3),(-1.0,3),(20051.0,3),(25.0,0),(25.0,11)] {
+            var request=OperationRequest();var query=PlaceQueryDefaults();query.maxDistanceKM=distance;query.limit=limit;request.placeQuery=query
+            XCTAssertThrowsError(try WorkflowStore().encode(.init(name:"Invalid lookup",request:request)))
+        }
+        var request=OperationRequest();var query=PlaceQueryDefaults();query.maxDistanceKM=5;query.limit=4;request.placeQuery=query
+        let roundtrip=try WorkflowStore().decode(WorkflowStore().encode(.init(name:"Nearby",request:request)))
+        XCTAssertEqual(roundtrip.request.placeQuery,query)
+    }
     func testFixedOffsetBoundaryRoundTripsAndExtremeIntegerRejects() throws {
         let store=WorkflowStore()
         for offset in [-64800,64800] {

@@ -5,3 +5,5 @@ work/
 outputs/releases/
 .DS_Store
 Tests/PrivateFixtures/
+__pycache__/
+*.pyc

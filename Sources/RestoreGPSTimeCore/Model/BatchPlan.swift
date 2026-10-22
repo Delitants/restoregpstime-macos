@@ -13,6 +13,7 @@ public struct PlannedItem:Codable,Equatable,Sendable {
     public let metadata:MetadataDocument
     public let resolution:DateResolution?
     public let place:PlaceMatch?
+    public var placeCandidates:[PlaceMatch]?=nil
     public let name:NameReservation
     public let mutation:MutationPlan
     public let capabilities:[String:CapabilityDecision]

@@ -30,15 +30,28 @@ public final class RecoveryJournal:@unchecked Sendable {
         try checkpoint(.beforeJournalSync)
         guard fsync(fd)==0,renameat(parent,temporary,parent,"\(record.groupID.uuidString).json")==0,fsync(parent)==0 else {throw SecureFS.error("Persist recovery journal")}
     }
+    public func record(groupID:UUID) throws -> RecoveryRecord? {
+        lock.lock();defer {lock.unlock()};return try readRecord(groupID)
+    }
+    private func readRecord(_ groupID:UUID) throws -> RecoveryRecord? {
+        let parent=try SecureFS.directory(batchDirectory.appendingPathComponent("groups"));defer {close(parent)}
+        let fd=openat(parent,"\(groupID.uuidString).json",O_RDONLY|O_NONBLOCK|O_NOFOLLOW|O_CLOEXEC)
+        if fd<0 && errno==ENOENT {return nil}
+        guard fd>=0 else {throw SecureFS.error("Open recovery manifest")}
+        let handle=FileHandle(fileDescriptor:fd,closeOnDealloc:true);defer {try? handle.close()}
+        var before=stat(),after=stat()
+        guard fstat(fd,&before)==0,before.st_mode & S_IFMT==S_IFREG,before.st_nlink==1,before.st_uid==getuid(),before.st_mode & 0o077==0,before.st_size>=0,before.st_size<=67_108_864 else {throw RestoreError(.invalidInput,"Unsafe recovery manifest.")}
+        let data=try handle.read(upToCount:67_108_865) ?? Data()
+        guard data.count<=67_108_864,fstat(fd,&after)==0,before.st_size==after.st_size,before.st_mtimespec.tv_sec==after.st_mtimespec.tv_sec,before.st_mtimespec.tv_nsec==after.st_mtimespec.tv_nsec,before.st_ctimespec.tv_sec==after.st_ctimespec.tv_sec,before.st_ctimespec.tv_nsec==after.st_ctimespec.tv_nsec else {throw RestoreError(.conflict,"Recovery manifest changed while reading it.")}
+        let record=try JSONDecoder().decode(RecoveryRecord.self,from:data)
+        guard record.schema==1,record.batchID==batchID,record.groupID==groupID else {throw RestoreError(.invalidInput,"Recovery manifest identity mismatch.")}
+        return record
+    }
     public func records() throws -> [RecoveryRecord] {
         lock.lock();defer {lock.unlock()}
         let directory=batchDirectory.appendingPathComponent("groups")
         return try FileManager.default.contentsOfDirectory(at:directory,includingPropertiesForKeys:nil).filter {$0.pathExtension=="json"}.sorted {$0.path<$1.path}.map {url in
-            let snapshot=try FileIdentityReader().snapshot(at:url)
-            guard snapshot.kind == .regular,snapshot.id.linkCount==1,snapshot.id.size<=67_108_864,snapshot.permissions & 0o077==0 else {throw RestoreError(.invalidInput,"Unsafe recovery manifest.")}
-            let record=try JSONDecoder().decode(RecoveryRecord.self,from:Data(contentsOf:url))
-            guard record.schema==1,record.batchID==batchID,url.lastPathComponent==record.groupID.uuidString+".json" else {throw RestoreError(.invalidInput,"Recovery manifest identity mismatch.")}
-            return record
+            guard let id=UUID(uuidString:url.deletingPathExtension().lastPathComponent),let record=try readRecord(id) else {throw RestoreError(.conflict,"Recovery manifest disappeared or has an invalid name.")};return record
         }
     }
     public func incompleteRecords() throws -> [RecoveryRecord] {try records().filter {$0.phase != .committed && $0.phase != .restored}}

@@ -47,6 +47,9 @@ public struct WorkflowStore:Sendable {
         guard document.schema==1 else {throw invalid("Unsupported workflow schema")}
         guard !document.name.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty,document.name.utf8.count<=512,!document.name.utf8.contains(0) else {throw invalid("Enter a bounded workflow name")}
         guard request.placeOverrides.isEmpty,request.excludedSourceKeys.isEmpty,request.groups.unlinkedSourceKeys.isEmpty,request.groups.forcedGroups.isEmpty else {throw invalid("Workflow contains per-file data")}
+        if let query=request.placeQuery {
+            guard query.maxDistanceKM.isFinite,query.maxDistanceKM>0,query.maxDistanceKM<=20050,(1...10).contains(query.limit) else {throw invalid("Invalid offline lookup radius or candidate count")}
+        }
         _=try request.rename.parsed()
         if request.trashHiddenFiles {guard request.dates==nil,request.location==nil,request.tags.isEmpty,!request.removeGPS,!request.stripMetadata,request.rename.preserveOriginal,request.finder.isEmpty,request.metadataDestination == .embedded else {throw invalid("Trash cleanup must be a separate workflow")}}
         if let policy=request.dates {

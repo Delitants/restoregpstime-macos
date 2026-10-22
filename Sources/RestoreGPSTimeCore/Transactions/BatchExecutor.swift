@@ -75,6 +75,7 @@ public actor BatchExecutor {
                     directoryOverrides.merge(updated,uniquingKeysWith:{$1})
                 }
             }
+            let hasSelectedDirectories=groups.contains {$0.items.contains {$0.source.snapshot.kind == .directory}}
             for group in groups {
                 let result:GroupResult
                 if group.eligibility != .eligible {result = .init(groupID:group.id,status:group.eligibility == .excluded ? .excluded:.blocked,errors:group.blockingReasons)}
@@ -83,7 +84,7 @@ public actor BatchExecutor {
                     var record=RecoveryRecord(batchID:plan.id,group:group,options:plan.options)
                     do {
                         try SourceRevalidator().validate(group,overrides:directoryOverrides)
-                        if let prepared=try journal.records().first(where:{$0.groupID==group.id}),prepared.phase == .backedUp {record=prepared}
+                        if let prepared=try journal.record(groupID:group.id),prepared.phase == .backedUp {record=prepared}
                         else {
                             try journal.persist(record);try options.checkpoint(.persisted(.prepared))
                             continuation.yield(.progress(group.id,phase:"Retaining originals"))
@@ -106,7 +107,7 @@ public actor BatchExecutor {
                         var status:GroupStatus=cancellation ? .cancelled:.failed
                         var messages=[error.localizedDescription]
                         do {
-                            if var latest=try journal.records().first(where:{$0.groupID==group.id}) {
+                            if var latest=try journal.record(groupID:group.id) {
                                 let mayHaveMutated=latest.phase == .committing || latest.phase == .committed
                                 latest.errors+=messages;latest.phase=mayHaveMutated ? .recoveryNeeded:(cancellation ? .cancelled:.failed);try journal.persist(latest)
                                 if mayHaveMutated {
@@ -119,8 +120,8 @@ public actor BatchExecutor {
                         result = .init(groupID:group.id,status:status,errors:messages,recoveryURL:journal.recordURL(groupID:group.id))
                     }
                 }
-                if let updated=try? SourceRevalidator().refreshedDirectoryOverrides(plan:plan,journal:journal,previous:directoryOverrides) {directoryOverrides=updated}
-                for record in (try? journal.records()) ?? [] {ownedDirectories.merge(record.createdDirectories,uniquingKeysWith:{$1})}
+                if hasSelectedDirectories,let updated=try? SourceRevalidator().refreshedDirectoryOverrides(plan:plan,journal:journal,previous:directoryOverrides) {directoryOverrides=updated}
+                if let record=try? journal.record(groupID:group.id) {ownedDirectories.merge(record.createdDirectories,uniquingKeysWith:{$1})}
                 if result.status == .committed,group.items.contains(where:{$0.mutation.finder.contains(.notify)}) {await notifier.notify(changed:result.outputs)}
                 results.append(result);continuation.yield(.group(result))
             }

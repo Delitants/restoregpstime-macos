@@ -10,6 +10,8 @@ struct ToolsCommands:Commands {
             Button("Hide Hidden Files…") {session.finderTool = .hide}
             Button("Restore Previous Finder Visibility…") {session.finderTool = .restore}
             Divider()
+            Button("Move Hidden Files to Trash…") {session.showScopedTrash=true}.disabled(session.model?.isBusy != false || session.scopedToolRunning)
+            Divider()
             Button("Export Local Diagnostics…") {Task {await session.exportDiagnostics()}}
         }
         CommandGroup(after:.sidebar) {

@@ -26,6 +26,12 @@ if [ -e "$app" ]; then echo "Output exists: $app. Choose a new output directory;
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Helpers" "$app/Contents/PlugIns/PerlModules" "$app/Contents/Resources/PerlRuntime" "$app/Contents/Resources/ExifTool" "$app/Contents/Resources/Notices"
 cp "$bin_path/RestoreGPSTime" "$app/Contents/MacOS/RestoreGPSTime"
 cp "$repo_root/App/Info.plist" "$app/Contents/Info.plist"
+python3 - "$app" "$arch" "$configuration" <<'PYBUILD'
+import datetime,json,pathlib,subprocess,sys
+app=pathlib.Path(sys.argv[1]);source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+dirty=bool(subprocess.check_output(['git','status','--porcelain'],text=True).strip())
+(app/'Contents/Resources/build-identity.json').write_text(json.dumps({'schema':1,'sourceCommit':source,'sourceDirty':dirty,'architecture':sys.argv[2],'configuration':sys.argv[3],'minimumOS':'13.0'},sort_keys=True)+'\n')
+PYBUILD
 cp "$repo_root/App/Resources/AppIcon.icns" "$app/Contents/Resources/"
 cp "$repo_root/work/runtime-install/$arch-macos13/bin/perl" "$app/Contents/Helpers/perl"
 cp -R "$repo_root/work/runtime-install/$arch-macos13/lib" "$app/Contents/Resources/PerlRuntime/"

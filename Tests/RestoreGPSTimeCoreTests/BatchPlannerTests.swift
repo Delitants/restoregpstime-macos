@@ -49,6 +49,16 @@ final class BatchPlannerTests:PlanningTestCase {
         XCTAssertEqual(plan.groups.map {$0.items[0].source.snapshot.url.lastPathComponent},["a.HEIC","b.HEIC"])
         XCTAssertEqual(Set(plan.groups.flatMap(\.items).compactMap {$0.mutation.dates?.creationDate}),[plan.frozenNow])
     }
+    func testLinkedExistingSidecarKeepsExactCapturePrecision() async throws {
+        var photo=try item("Exact.HEIC",id:"pair")
+        photo=InspectedItem(snapshot:photo.snapshot,metadata:.init(tags:["Apple:ContentIdentifier":.string("pair"),"ExifIFD:DateTimeOriginal":.string("2024:01:02 03:04:05.123456789+02:00")],profile:photo.metadata.profile),place:photo.place)
+        let sidecar=try item("Exact.xmp",family:.unknown)
+        var request=OperationRequest();request.dates=DatePolicy()
+        let plan=try await planner().preview(items:[photo,sidecar],request:request,options:options())
+        let output=try XCTUnwrap(plan.groups.flatMap(\.items).first {$0.source.snapshot.url.pathExtension=="xmp"})
+        XCTAssertEqual(output.resolution?.exactTimestamp?.nanoseconds,123456789)
+        XCTAssertEqual(output.mutation.dates?.creationTimestamp?.nanoseconds,123456789)
+    }
     func testLinkedSidecarUsesCaptureOfPrimary() async throws {
         var photo=try item("IMG.HEIC",id:"pair")
         photo=InspectedItem(snapshot:photo.snapshot,metadata:MetadataDocument(tags:["Apple:ContentIdentifier":.string("pair"),"ExifIFD:DateTimeOriginal":.string("2024:01:02 03:04:05+02:00")],profile:photo.metadata.profile),place:photo.place)

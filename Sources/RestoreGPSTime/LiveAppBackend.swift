@@ -32,7 +32,11 @@ actor LiveAppBackend:AppBackend {
                 try Task.checkCancellation()
                 let key=resolved[index].snapshot.id.physicalKey
                 if let manual=request.placeOverrides[key] {resolved[index].place=manual}
-                else {resolved[index].place=try? await places.resolve(document:resolved[index].metadata,correction:nil).first}
+                else {
+                    let candidates=try? await places.resolve(document:resolved[index].metadata,correction:nil,queryDefaults:request.placeQuery ?? PlaceQueryDefaults())
+                    resolved[index].placeCandidates=candidates
+                    resolved[index].place=candidates?.first
+                }
             }
         }
         let identity=try await provider.observe()

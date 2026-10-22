@@ -1,28 +1,34 @@
 # RestoreGPSTime
 
-An original native macOS 13+ photo/video metadata and file-attribute utility, being implemented with separate Apple Silicon and Intel releases.
+Original native macOS utility for restoring photo/video file dates and place names. Separate Apple Silicon and Intel builds target macOS 13+. **Development candidates are local; stable releases have not been published.**
 
-The user approved the specification and implementation plan and chose implementation in this chat. The final app name is **RestoreGPSTime**. Implementation is in progress: the native app/runtime foundation and read-only discovery are under test. The foundation window explicitly has no file-processing controls yet. Local ad-hoc test signing is not Developer ID signing or notarization; no public release has been published.
+Restore creation and modification dates from qualified EXIF/XMP/QuickTime capture metadata, explicit date sources, reference files, filenames, shifts or sequences. Resolve existing GPS coordinates to approximate city/country names offline, review distance and alternatives, correct a place manually, write qualified comments/structured metadata or rename files with collision-safe numbering.
 
-- [Specification](docs/superpowers/specs/2026-10-21-restoregpstime-design.md): requirements, user flow, date/place semantics, file recovery, format limits and release acceptance.
-- [Implementation plan](docs/superpowers/plans/2026-10-21-restoregpstime-implementation.md): 13 tasks, exact contracts, focused test cycles and publication checks.
-- [Reference action matrix](docs/acceptance/reference-actions.csv): all 31 actions from the installed reference app, mapped to planned behavior and verification.
-- [Reference Tools matrix](docs/acceptance/reference-tools.csv): the two additional Finder visibility commands, with explicit restoration and isolated testing.
-- [Planning review](docs/acceptance/planning-review.md): document checks and remaining resource dependencies.
+The app supports batch preview, Save Copies and recoverable in-place processing. Frozen plans retain selected settings, identities, date provenance, names and dependencies. It streams file hashing, verifies stored image/video payloads, rejects conflicting edits and retains partial reports and recovery evidence. Workflows, Services and native droplets import files for review before Apply. Finder attributes, scoped system Trash and Finder visibility are available as separate actions.
 
-Public publication to `Delitants/restoregpstime-macos` remains scheduled for when both release versions satisfy their acceptance checks. Cross-compilation and Intel execution through Rosetta do not qualify native Intel/macOS 13 or signing gates.
+Generated integration fixtures cover JPEG, baseline HEIC, TIFF, PNG, WebP, AVIF, MOV and MP4. Embedded-write support is qualified by operation and layout. Genuine HDR/depth/auxiliary HEIF, Live Photos, RAW families, additional video formats, large real video and filesystem/host matrices still need acceptance evidence. See [known limits](docs/KNOWN-LIMITS.md).
 
-## Development
+The app bundles ExifTool 13.59, Perl 5.44.0 and an offline GeoNames-derived database. It makes no outbound network requests and requires no separate Perl/Homebrew installation. Reports stay local and omit coordinates by default. Dependency source hashes/licenses are recorded in `Dependencies/` and `ThirdParty/`.
 
-Use Xcode with Swift 5.9 or newer, Python 3.12+ for build scripts, and the system C compiler/make. The app itself needs no separately installed Perl, Python, Homebrew or ExifTool.
+## Build and test
+
+Use Xcode with Swift 5.9 or newer, Python 3.12+, the system C compiler and make. Build scripts download official pinned dependency archives, verify their SHA-256 values and retain build receipts. Existing candidate outputs are never overwritten.
 
 ```sh
-Scripts/build-app.sh --arch arm64 --configuration debug --output work/test-bundles/arm64-standard
+Scripts/build-app.sh --arch arm64 --configuration debug --output work/test-bundles/FRESH_ARM64
 Scripts/test.sh
+Scripts/build-app.sh --arch x86_64 --configuration release --output work/test-bundles/FRESH_INTEL
+python3 -m unittest discover -s Tests/ReleaseGateTests -v
 ```
 
-For Intel builds, use `--arch x86_64` and a fresh output directory. Test the matching bundle with `RESTOREGPSTIME_TEST_APP=/absolute/path/to/RestoreGPSTime.app RESTOREGPSTIME_TEST_ARCH=x86_64 Scripts/test.sh`. The local test runner keeps compiler caches under `work/` for restricted development environments.
+Choose a matching fixture bundle with `RESTOREGPSTIME_TEST_APP` for Core tests and `RESTOREGPSTIME_TEST_APP_BUNDLE` for app backend tests. Intel tests must execute under a matching process; SwiftPM discovery from an ARM process is not native Intel proof. Rosetta is labeled separately. Generated test files belong only in disposable local workspaces. The system Trash test is opt-in.
 
-Dependencies are fetched from their official sources and checked against `Dependencies/dependencies.lock.json`. An existing build output is never overwritten: choose a fresh output directory to retain failed evidence. Generated fixtures contain geometric images and synthetic GPS, with provenance in `Tests/Fixtures/manifest.json`.
+The developer-only `RestoreGPSTimeQA` executable records actual host identity, bundled runtime/dependency hashes and fixture identities. `Scripts/qualify.sh --app PATH --fixture-manifest PATH --evidence-dir FRESH_PATH --host-label LABEL` writes explicit pass/fail/missing gates and returns nonzero for incomplete acceptance. It is not included in the user app. The manual self-hosted workflow performs no artifact/private-media upload.
 
-No proprietary reference implementation/artwork, personal media, signing credentials or remote GitHub project is included. Dependency source/license notices are retained in `ThirdParty/`; downloaded/build products remain local and ignored.
+## Acceptance and release
+
+[Installation](docs/INSTALL.md), [recovery](docs/RECOVERY.md), [release procedure](docs/RELEASE.md), [evidence contract](docs/acceptance/EVIDENCE.md), [format matrix](docs/acceptance/format-matrix.json), [host matrix](docs/acceptance/host-matrix.json), [31 reference actions](docs/acceptance/reference-actions.csv), and [Finder Tools](docs/acceptance/reference-tools.csv).
+
+Stable publication to `Delitants/restoregpstime-macos` requires both architecture sets at one reviewed source SHA, native ARM/Intel and macOS 13 acceptance, genuine-format/volume evidence, native UI/OS integration, the Instruments responsiveness trace, relocated/offline/quarantine checks, public-content audit, Developer ID signing and notarization. Missing evidence blocks the release checker and publisher. Local ad-hoc signing and cross-compilation do not satisfy these gates.
+
+[Approved specification](docs/superpowers/specs/2026-10-21-restoregpstime-design.md), [implementation plan](docs/superpowers/plans/2026-10-21-restoregpstime-implementation.md), and [reference behavior](docs/REFERENCE.md). Original code uses the MIT license; dependencies retain their separate licenses. No reference-app binary/artwork or personal media is distributed.

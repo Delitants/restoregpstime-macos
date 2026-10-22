@@ -16,6 +16,7 @@ public struct InspectedItem: Codable,Equatable,Sendable {
     public let metadata: MetadataDocument
     public var dateResolution:DateResolution?
     public var place:PlaceMatch?
+    public var placeCandidates:[PlaceMatch]?
     public init(snapshot: FileSnapshot, metadata: MetadataDocument,dateResolution:DateResolution?=nil,place:PlaceMatch?=nil) { self.snapshot = snapshot; self.metadata = metadata;self.dateResolution=dateResolution;self.place=place }
 }
 public struct SourceInventory {

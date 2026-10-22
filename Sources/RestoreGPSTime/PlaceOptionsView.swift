@@ -6,6 +6,11 @@ struct PlaceOptionsView:View {
         VStack(alignment:.leading,spacing:12) {
             Text("Restore place names").font(.headline)
             Text("Coordinates are looked up in the bundled offline database. Results are nearby populated places, with approximate distance shown in the inspector.").font(.callout).foregroundStyle(.secondary)
+            HStack {
+                Text("Maximum distance (km)")
+                TextField("25",value:Binding(get:{model.request.placeQuery?.maxDistanceKM ?? 25},set:{var query=model.request.placeQuery ?? PlaceQueryDefaults();query.maxDistanceKM=$0;model.request.placeQuery=query}),format:.number).frame(width:85)
+                Stepper("Candidates: \(model.request.placeQuery?.limit ?? 3)",value:Binding(get:{model.request.placeQuery?.limit ?? 3},set:{var query=model.request.placeQuery ?? PlaceQueryDefaults();query.limit=$0;model.request.placeQuery=query}),in:1...10)
+            }
             Toggle("Write place names to metadata",isOn:Binding(get:{model.request.location != nil},set:{model.request.location=$0 ? LocationWriteOptions():nil}))
             if let value=model.request.location {
                 Toggle("Write a comment",isOn:Binding(get:{value.writeComment},set:{model.request.location?.writeComment=$0}))

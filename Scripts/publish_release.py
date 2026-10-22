@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""Publish only a fully checked candidate; retain receipts and never clobber."""
+import argparse,json,pathlib,subprocess,tempfile
+from release_gate import COMMON_ASSETS,release_names,sha256,upload_disposition,validate_pair,verify_assets
+p=argparse.ArgumentParser();p.add_argument('--repository',required=True,choices=['Delitants/restoregpstime-macos']);p.add_argument('--tag',required=True,choices=['v1.0.0-arm64','v1.0.0-x86_64']);p.add_argument('--manifest',required=True);p.add_argument('--peer-manifest',required=True);a=p.parse_args()
+manifest=pathlib.Path(a.manifest).resolve();peer=pathlib.Path(a.peer_manifest).resolve();root=manifest.parent
+m=json.loads(manifest.read_text());other=json.loads(peer.read_text())
+errors=validate_pair(m,other)+verify_assets(m,root)+verify_assets(other,peer.parent)
+if m.get('tag')!=a.tag:errors.append('Tag differs from exact candidate manifest')
+if errors:raise SystemExit('Publication blocked: '+'; '.join(errors))
+repo_root=pathlib.Path(__file__).resolve().parents[1]
+source=subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo_root,text=True).strip()
+if source!=m['sourceCommit'] or subprocess.check_output(['git','status','--porcelain'],cwd=repo_root,text=True).strip():raise SystemExit('Publication requires the exact clean reviewed source checkout')
+# Re-run actual archive/signature checks before any API call that mutates state.
+subprocess.run([str(repo_root/'Scripts/check-release.sh'),'--directory',str(root),'--arch',m['architecture'],'--source-commit',source,'--peer-manifest',str(peer)],check=True)
+subprocess.run([str(repo_root/'Scripts/check-release.sh'),'--directory',str(peer.parent),'--arch',other['architecture'],'--source-commit',source,'--peer-manifest',str(manifest)],check=True)
+receipts=pathlib.Path(tempfile.mkdtemp(prefix='publish-',dir=repo_root/'work'))
+count=0
+
+def api(path,*extra,optional=False):
+ global count
+ count+=1;r=subprocess.run(['gh','api',path,*extra],capture_output=True)
+ (receipts/f'{count:03d}-response.json').write_bytes(r.stdout);(receipts/f'{count:03d}-stderr.txt').write_bytes(r.stderr)
+ if r.returncode:
+  if optional and b'HTTP 404' in r.stderr:return None
+  raise RuntimeError('GitHub API failed; retained receipts at '+str(receipts))
+ return json.loads(r.stdout)
+
+account=api('user');repository=api('repos/'+a.repository)
+if repository.get('full_name')!=a.repository or repository.get('private') is not False:raise SystemExit('Repository identity/public visibility differs; no publication performed')
+api(f'repos/{a.repository}/commits/{source}')
+ref=api(f'repos/{a.repository}/git/ref/tags/{a.tag}',optional=True)
+if ref:
+ obj=ref['object'];depth=0
+ while obj['type']=='tag' and depth<8:obj=api(f'repos/{a.repository}/git/tags/{obj["sha"]}')['object'];depth+=1
+ if obj.get('type')!='commit' or obj.get('sha')!=source:raise SystemExit('Existing tag points to different content; never replace it')
+release=api(f'repos/{a.repository}/releases/tags/{a.tag}',optional=True)
+if release is None:
+ release=api(f'repos/{a.repository}/releases','-X','POST','-f','tag_name='+a.tag,'-f','target_commitish='+source,'-f','name=RestoreGPSTime 1.0.0 ('+m['architecture']+')','-f','body=Native macOS 13+ release. See the attached installation, recovery, format and evidence documents.','-F','draft=true')
+expected={x['name']:x['sha256'] for x in m['assets']}
+expected['release-evidence.json']=sha256(manifest);expected['SHA256SUMS.txt']=sha256(root/'SHA256SUMS.txt')
+allowed=release_names('1.0.0',m['architecture'])|COMMON_ASSETS|{'release-evidence.json','SHA256SUMS.txt'}
+existing={x['name']:x for x in release['assets']}
+if not set(existing).issubset(allowed):raise SystemExit('Existing release contains unexpected assets; retain and review it')
+
+def download(asset,destination):
+ with destination.open('xb') as f:r=subprocess.run(['gh','api',f'repos/{a.repository}/releases/assets/{asset["id"]}','-H','Accept: application/octet-stream'],stdout=f,stderr=subprocess.PIPE)
+ if r.returncode:raise RuntimeError('Asset download failed; retained receipts')
+ return sha256(destination)
+
+for name,digest in expected.items():
+ if sha256(root/name)!=digest:raise SystemExit('Local asset changed during publication')
+ previous=download(existing[name],receipts/('existing-'+name)) if name in existing else None
+ if upload_disposition(digest,previous)=='upload':
+  # gh refuses an existing asset; deliberately omit --clobber.
+  subprocess.run(['gh','release','upload',a.tag,str(root/name),'--repo',a.repository],check=True)
+readback=api(f'repos/{a.repository}/releases/tags/{a.tag}');assets={x['name']:x for x in readback['assets']}
+if set(assets)!=set(expected):raise SystemExit('Release asset inventory differs after upload; draft retained')
+for name,digest in expected.items():
+ if download(assets[name],receipts/('readback-'+name))!=digest:raise SystemExit('Release asset read-back differs; draft retained')
+if readback.get('draft'):
+ readback=api(f'repos/{a.repository}/releases/{readback["id"]}','-X','PATCH','-F','draft=false')
+(receipts/'publication-result.json').write_text(json.dumps({'repository':a.repository,'tag':a.tag,'sourceCommit':source,'authenticatedLogin':account.get('login'),'url':readback['html_url'],'assetHashes':expected},indent=2)+'\n')
+print(readback['html_url']);print('Retained publication receipts: '+str(receipts))

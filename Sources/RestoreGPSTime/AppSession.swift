@@ -7,6 +7,8 @@ import RestoreGPSTimeCore
     @Published var runtimeIssue:String?
     @Published var runtimeDescription="Checking bundled metadata runtime…"
     @Published var finderTool:FinderTool?
+    @Published var showScopedTrash=false
+    @Published var scopedToolRunning=false
     @Published var toolResult:String?
     @Published var appearanceChoice=0
     @Published var incompleteRecoveryCount=0
@@ -47,6 +49,7 @@ import RestoreGPSTimeCore
     }
     func open(_ url:URL) async {_ = await openURLs([url])}
     func openURLs(_ urls:[URL]) async -> ImportOutcome {
+        guard !scopedToolRunning else {return .init(errors:["Finish scoped Trash cleanup before importing another batch."])}
         guard importer != nil else {pendingImports.append(urls);return .init(errors:[])}
         guard openQueue.count<100 else {return .init(errors:["Too many pending imports. Finish this batch and open the remaining files again."])}
         return await withCheckedContinuation {continuation in

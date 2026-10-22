@@ -1,0 +1,36 @@
+name: Local native qualification
+on:
+  workflow_dispatch:
+    inputs:
+      architecture:
+        type: choice
+        options: [arm64, x86_64]
+        required: true
+      os:
+        type: choice
+        options: [macos13, current]
+        required: true
+# No hosted runner, pull-request trigger, upload-artifact action or private-media
+# transfer. Provisioning an exact self-hosted qualification host is separate.
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: [self-hosted, macOS, '${{ inputs.architecture }}', '${{ inputs.os }}', restoregpstime-private-qa]
+    steps:
+      - name: Verify pre-staged clean source identity
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test -z "$(git status --porcelain)"
+      - name: Run local deterministic tests
+        run: Scripts/test.sh
+      - name: Qualify pre-staged candidate and lawful fixtures
+        shell: bash
+        run: |
+          test -n "$RESTOREGPSTIME_QA_APP"
+          test -n "$RESTOREGPSTIME_QA_FIXTURES"
+          test -n "$RESTOREGPSTIME_QA_EVIDENCE"
+          Scripts/qualify.sh --app "$RESTOREGPSTIME_QA_APP" --fixture-manifest "$RESTOREGPSTIME_QA_FIXTURES" --evidence-dir "$RESTOREGPSTIME_QA_EVIDENCE" --host-label "${{ inputs.architecture }}-${{ inputs.os }}"

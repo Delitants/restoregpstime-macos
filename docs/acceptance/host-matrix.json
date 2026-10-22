@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "hosts": [
+    {
+      "id": "native-arm64-macos13",
+      "processArchitecture": "arm64",
+      "hardwareARM": true,
+      "translated": false,
+      "minimumOS": 13,
+      "requiredOSMajor": 13,
+      "status": "missing",
+      "evidence": []
+    },
+    {
+      "id": "native-arm64-current",
+      "processArchitecture": "arm64",
+      "hardwareARM": true,
+      "translated": false,
+      "minimumOS": 13,
+      "requiredOSMajor": 27,
+      "status": "missing",
+      "evidence": []
+    },
+    {
+      "id": "native-x86_64-macos13",
+      "processArchitecture": "x86_64",
+      "hardwareARM": false,
+      "translated": false,
+      "minimumOS": 13,
+      "requiredOSMajor": 13,
+      "status": "missing",
+      "evidence": []
+    },
+    {
+      "id": "native-x86_64-current",
+      "processArchitecture": "x86_64",
+      "hardwareARM": false,
+      "translated": false,
+      "minimumOS": 13,
+      "requiredOSMajor": 27,
+      "status": "missing",
+      "evidence": []
+    }
+  ],
+  "note": "Cross-compilation, LC_BUILD_VERSION and Rosetta do not establish native execution."
+}

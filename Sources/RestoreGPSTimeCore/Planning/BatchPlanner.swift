@@ -12,6 +12,9 @@ public struct BatchPlanner:Sendable {
         return try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
     }
     private func build(items:[InspectedItem],request:OperationRequest,options:BatchOptions,now:Date) async throws -> BatchPlan {
+        if let query=request.placeQuery {
+            guard query.maxDistanceKM.isFinite,query.maxDistanceKM>0,query.maxDistanceKM<=20050,(1...10).contains(query.limit) else {throw RestoreError(.invalidInput,"Invalid offline lookup radius or candidate count.")}
+        }
         if request.trashHiddenFiles {throw RestoreError(.invalidInput,"Trash uses a separate scoped preview and cannot run in a mutation batch.")}
         if request.removeGPS && request.location != nil {throw RestoreError(.invalidInput,"Choose either location output or location removal in one batch.")}
         if request.stripMetadata && (!request.tags.isEmpty || request.location != nil || request.dates?.embeddedDateRequested == true) {throw RestoreError(.invalidInput,"Metadata stripping cannot be combined with metadata additions.")}
@@ -48,7 +51,7 @@ public struct BatchPlanner:Sendable {
             let members=group.members.map {member -> InspectedItem in
                 guard member.metadata.profile.family == .unknown,["xmp","aae"].contains(member.snapshot.url.pathExtension.lowercased()) else {return member}
                 var linked=member
-                linked.dateResolution = .init(source:primary.source,original:primary.original,instant:primary.instant,offsetSeconds:primary.offsetSeconds,fractionalPrecision:primary.fractionalPrecision,interpretation:primary.interpretation+"; linked primary: "+group.primary.snapshot.url.lastPathComponent,warnings:primary.warnings)
+                linked.dateResolution = .init(source:primary.source,original:primary.original,instant:primary.instant,offsetSeconds:primary.offsetSeconds,fractionalPrecision:primary.fractionalPrecision,interpretation:primary.interpretation+"; linked primary: "+group.primary.snapshot.url.lastPathComponent,warnings:primary.warnings,exactTimestamp:primary.exactTimestamp)
                 dateErrors[member.snapshot.id.physicalKey]=nil
                 return linked
             }
@@ -120,7 +123,7 @@ public struct BatchPlanner:Sendable {
                 let mutation=MutationPlan(dates:sourceDates,tags:metadataSidecar ? []:tags,removeGPS:request.removeGPS,stripMetadata:request.stripMetadata,finder:request.finder,profile:item.metadata.profile,allowedMetadataChanges:.init(tags:metadataSidecar ? []:tagIDs,removesGPS:request.removeGPS,stripsDescriptive:request.stripMetadata))
                 do {try await Self.qualifyMetadata(mutation,document:item.metadata,source:item.snapshot)} catch {reasons.append(error.localizedDescription)}
                 let source=fingerprints[key] ?? .init(snapshot:item.snapshot,contentHash:"")
-                plannedItems.append(.init(source:source,metadata:item.metadata,resolution:item.dateResolution,place:item.place,name:name,mutation:mutation,capabilities:decisions,destinationAnchor:anchor,blockingReasons:reasons))
+                plannedItems.append(.init(source:source,metadata:item.metadata,resolution:item.dateResolution,place:item.place,placeCandidates:item.placeCandidates,name:name,mutation:mutation,capabilities:decisions,destinationAnchor:anchor,blockingReasons:reasons))
                 if metadataSidecar {
                     let target=name.finalURL.deletingPathExtension().appendingPathExtension("xmp")
                     var sidecarReasons=[String]();var st=stat()
@@ -135,7 +138,7 @@ public struct BatchPlanner:Sendable {
                     sidecarDates?.modificationDate=nil;sidecarDates?.modificationTimestamp=nil
                     let sidecarMutation=MutationPlan(dates:sidecarDates,tags:tags,outputKind:.xmpSidecar,profile:sidecarDocument.profile,allowedMetadataChanges:.init(tags:tagIDs))
                     do {try await Self.qualifyMetadata(sidecarMutation,document:sidecarDocument,source:item.snapshot)} catch {sidecarReasons.append(error.localizedDescription)}
-                    plannedItems.append(.init(source:source,metadata:sidecarDocument,resolution:item.dateResolution,place:item.place,name:sidecarName,mutation:sidecarMutation,capabilities:["embeddedWrite":support],destinationAnchor:anchor,blockingReasons:sidecarReasons))
+                    plannedItems.append(.init(source:source,metadata:sidecarDocument,resolution:item.dateResolution,place:item.place,placeCandidates:item.placeCandidates,name:sidecarName,mutation:sidecarMutation,capabilities:["embeddedWrite":support],destinationAnchor:anchor,blockingReasons:sidecarReasons))
                     reasons+=sidecarReasons
                 }
                 groupErrors+=reasons
