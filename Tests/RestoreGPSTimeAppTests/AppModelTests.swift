@@ -6,6 +6,7 @@ actor FakeAppBackend:AppBackend {
     let items:[InspectedItem]
     var excluded=[ExcludedSource]()
     private(set) var executions=0,restorations=0
+    private(set) var inspectionInputs=[[URL]]()
     var failure=false,hold=false
     private(set) var inspectionStarted=false,previewStarted=false
     var holdInspection=false,holdPreview=false
@@ -13,7 +14,7 @@ actor FakeAppBackend:AppBackend {
     private var activePlan:BatchPlan?,continuation:AsyncStream<BatchEvent>.Continuation?
     init(items:[InspectedItem]) {self.items=items}
     func inspect(_ urls:[URL],options:DiscoveryOptions) async throws -> [InspectedItem] {
-        inspectionStarted=true
+        inspectionStarted=true;inspectionInputs.append(urls)
         if holdInspection {await withCheckedContinuation {inspectionGate=$0}}
         return items
     }

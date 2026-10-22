@@ -40,7 +40,7 @@ struct WorkspaceView:View {
                 var urls=[URL]()
                 for provider in providers {
                     let url:URL?=await withCheckedContinuation {continuation in
-                        _=provider.loadItem(forTypeIdentifier:UTType.fileURL.identifier,options:nil) {value,_ in
+                        provider.loadItem(forTypeIdentifier:UTType.fileURL.identifier,options:nil) {value,_ in
                             if let url=value as? URL {continuation.resume(returning:url)}
                             else if let data=value as? Data {continuation.resume(returning:URL(dataRepresentation:data,relativeTo:nil))}
                             else {continuation.resume(returning:nil)}
@@ -48,7 +48,7 @@ struct WorkspaceView:View {
                     }
                     if let url,url.isFileURL {urls.append(url)}
                 }
-                if !urls.isEmpty {await model.importURLs(urls)}
+                if !urls.isEmpty {_ = await session.openURLs(urls)}
             }
             return true
         }
@@ -69,7 +69,7 @@ struct WorkspaceView:View {
     }
     private var importBar:some View {
         HStack(spacing:12) {
-            Button {Task {await model.importURLs(await Panels.importFiles())}} label:{Label("Add Files…",systemImage:"plus")}.keyboardShortcut("o").disabled(model.isBusy)
+            Button {Task {_ = await session.openURLs(await Panels.importFiles())}} label:{Label("Add Files…",systemImage:"plus")}.keyboardShortcut("o").disabled(model.isBusy)
             Button("Refresh") {Task {await model.importURLs([])}}.disabled(model.isBusy || model.rows.isEmpty)
             Button("Clear") {model.clear();selection=nil}.disabled(model.isBusy || model.rows.isEmpty)
             Spacer()
@@ -86,7 +86,7 @@ struct WorkspaceView:View {
                     case .metadata:MetadataOptionsView(model:model)
                     case .finder:FinderOptionsView(model:model)
                     case .recovery:RecoveryView(model:model)
-                    case .workflows:Text("Saved Workflows").font(.headline);Text("Reusable settings for date restoration, place names, and file destinations.").foregroundStyle(.secondary)
+                    case .workflows:WorkflowView(session:session,model:model)
                     }
                 }.padding(16)
             }.frame(minWidth:300).disabled(model.isBusy)

@@ -17,6 +17,7 @@ export SWIFTPM_MODULECACHE_OVERRIDE="$repo_root/work/module-cache"
 export MACOSX_DEPLOYMENT_TARGET=13.0
 swift_flags=(--disable-sandbox --cache-path "$repo_root/work/swift-cache" --config-path "$repo_root/work/swift-config" --security-path "$repo_root/work/swift-security" --arch "$arch" --configuration "$configuration")
 swift build "${swift_flags[@]}" --product RestoreGPSTime
+swift build "${swift_flags[@]}" --product RestoreGPSTimeDroplet
 bin_path=$(swift build "${swift_flags[@]}" --show-bin-path)
 mkdir -p "$output"
 output=$(cd "$output" && pwd)
@@ -43,6 +44,13 @@ cp -R "$repo_root/ThirdParty/" "$app/Contents/Resources/Notices/"
 if [ -d "$repo_root/Sources/RestoreGPSTimeCore/Resources" ]; then
   cp "$repo_root/Sources/RestoreGPSTimeCore/Resources/"*.json "$app/Contents/Resources/"
 fi
+droplet="$app/Contents/Resources/DropletTemplate.app"
+mkdir -p "$droplet/Contents/MacOS" "$droplet/Contents/Resources"
+cp "$bin_path/RestoreGPSTimeDroplet" "$droplet/Contents/MacOS/RestoreGPSTimeDroplet"
+cp "$repo_root/App/DropletInfo.plist" "$droplet/Contents/Info.plist"
+cp "$repo_root/App/Resources/AppIcon.icns" "$droplet/Contents/Resources/"
+cp "$repo_root/App/Resources/DropletWorkflow.rgtimeworkflow" "$droplet/Contents/Resources/Workflow.rgtimeworkflow"
+cp "$repo_root/Sources/RestoreGPSTimeCore/Resources/writable-tags.json" "$droplet/Contents/Resources/"
 # Local test signing only. Developer ID/notarization is a separate release gate.
 python3 - "$app" <<'PY'
 import pathlib,subprocess,sys
@@ -53,6 +61,7 @@ for path in sorted(app.rglob('*'),key=lambda p:len(p.parts),reverse=True):
     with path.open('rb') as f:head=f.read(4)
     if head in magic:subprocess.run(['/usr/bin/codesign','--force','--sign','-',str(path)],check=True)
 PY
+/usr/bin/codesign --force --sign - "$droplet"
 /usr/bin/codesign --force --sign - "$app"
 /usr/bin/codesign --verify --deep --strict "$app"
 printf '%s\n' "$app"

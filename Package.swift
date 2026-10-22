@@ -6,11 +6,13 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [
         .library(name: "RestoreGPSTimeCore", targets: ["RestoreGPSTimeCore"]),
-        .executable(name: "RestoreGPSTime", targets: ["RestoreGPSTime"])
+        .executable(name: "RestoreGPSTime", targets: ["RestoreGPSTime"]),
+        .executable(name: "RestoreGPSTimeDroplet", targets: ["RestoreGPSTimeDroplet"])
     ],
     targets: [
         .target(name: "RestoreGPSTimeCore", resources:[.process("Resources")]),
         .executableTarget(name: "RestoreGPSTime", dependencies: ["RestoreGPSTimeCore"]),
+        .executableTarget(name: "RestoreGPSTimeDroplet", dependencies: ["RestoreGPSTimeCore"]),
         .testTarget(name: "RestoreGPSTimeCoreTests", dependencies: ["RestoreGPSTimeCore"]),
         .testTarget(name: "RestoreGPSTimeAppTests", dependencies: ["RestoreGPSTime", "RestoreGPSTimeCore"])
     ],

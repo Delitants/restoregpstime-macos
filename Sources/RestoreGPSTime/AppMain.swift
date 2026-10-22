@@ -4,6 +4,7 @@ import RestoreGPSTimeCore
 @main
 struct RestoreGPSTimeApp:App {
     @StateObject private var session=AppSession()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     var body:some Scene {
         WindowGroup("RestoreGPSTime") {
             Group {
@@ -23,8 +24,7 @@ struct RestoreGPSTimeApp:App {
             }
             .frame(minWidth:1100,minHeight:720)
             .preferredColorScheme(session.appearance)
-            .task {await session.start()}
-            .onOpenURL {url in Task {await session.open(url)}}
+            .task {await appDelegate.bind(session);await session.start()}
             .sheet(item:$session.finderTool) {tool in FinderToolSheet(session:session,tool:tool)}
             .alert("Tools",isPresented:Binding(get:{session.toolResult != nil},set:{if !$0 {session.toolResult=nil}})) {Button("OK") {session.toolResult=nil}} message:{Text(session.toolResult ?? "")}
         }.defaultSize(width:1280,height:820)

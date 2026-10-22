@@ -1,0 +1,22 @@
+{
+  "name": "Droplet Template",
+  "request": {
+    "excludedSourceKeys": [],
+    "finder": [],
+    "groups": {
+      "forcedGroups": [],
+      "unlinkedSourceKeys": []
+    },
+    "metadataDestination": "embedded",
+    "placeOverrides": {},
+    "removeGPS": false,
+    "rename": {
+      "pattern": "",
+      "preserveOriginal": true
+    },
+    "stripMetadata": false,
+    "tags": [],
+    "trashHiddenFiles": false
+  },
+  "schema": 1
+}
