@@ -39,6 +39,9 @@ cp "$repo_root/work/runtime-install/$arch-macos13/build-receipt.json" "$app/Cont
 cp "$repo_root/work/sources/exiftool-13.59/exiftool" "$app/Contents/Resources/ExifTool/"
 cp -R "$repo_root/work/sources/exiftool-13.59/lib" "$app/Contents/Resources/ExifTool/"
 cp -R "$repo_root/ThirdParty/" "$app/Contents/Resources/Notices/"
+if [ -d "$repo_root/Sources/RestoreGPSTimeCore/Resources" ]; then
+  cp "$repo_root/Sources/RestoreGPSTimeCore/Resources/"*.json "$app/Contents/Resources/"
+fi
 # Local test signing only. Developer ID/notarization is a separate release gate.
 python3 - "$app" <<'PY'
 import pathlib,subprocess,sys

@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "profiles": {
+    "JPEG": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
+    "HEIC": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
+    "HEIF": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
+    "TIFF": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
+    "PNG": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
+    "MOV": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false},
+    "MP4": {"embeddedWrite": false, "removeGPS": false, "stripMetadata": false}
+  }
+}

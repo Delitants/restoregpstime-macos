@@ -9,7 +9,7 @@ let package = Package(
         .executable(name: "RestoreGPSTime", targets: ["RestoreGPSTime"])
     ],
     targets: [
-        .target(name: "RestoreGPSTimeCore"),
+        .target(name: "RestoreGPSTimeCore", resources:[.process("Resources")]),
         .executableTarget(name: "RestoreGPSTime", dependencies: ["RestoreGPSTimeCore"]),
         .testTarget(name: "RestoreGPSTimeCoreTests", dependencies: ["RestoreGPSTimeCore"])
     ],
