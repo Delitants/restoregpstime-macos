@@ -10,10 +10,12 @@ public struct DiscoveryOptions: Sendable {
 }
 public struct ExcludedSource: Sendable { public let url: URL; public let reason: String }
 public struct DiscoveryResult: Sendable { public let snapshots: [FileSnapshot]; public let excluded: [ExcludedSource] }
-public struct InspectedItem: Sendable {
+public struct InspectedItem: Codable,Equatable,Sendable {
     public let snapshot: FileSnapshot
     public let metadata: MetadataDocument
-    public init(snapshot: FileSnapshot, metadata: MetadataDocument) { self.snapshot = snapshot; self.metadata = metadata }
+    public var dateResolution:DateResolution?
+    public var place:PlaceMatch?
+    public init(snapshot: FileSnapshot, metadata: MetadataDocument,dateResolution:DateResolution?=nil,place:PlaceMatch?=nil) { self.snapshot = snapshot; self.metadata = metadata;self.dateResolution=dateResolution;self.place=place }
 }
 public struct SourceInventory {
     public init() {}
