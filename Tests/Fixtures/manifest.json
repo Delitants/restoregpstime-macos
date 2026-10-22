@@ -1,0 +1,43 @@
+{
+  "expectedCaptureInstant" : "2024-01-02T01:04:05Z",
+  "expectedCountryCode" : "FR",
+  "fixtures" : [
+    {
+      "container" : "public.jpeg",
+      "id" : "paris.jpg",
+      "license" : "MIT",
+      "origin" : "Generated geometric image; synthetic Paris GPS; no personal media",
+      "sha256" : "0eafc7d04d547a778627fd7dc9bd7d2891115bc2a07281c0568b07e26c92472b"
+    },
+    {
+      "container" : "public.heic",
+      "id" : "paris.heic",
+      "license" : "MIT",
+      "origin" : "Generated geometric image; synthetic Paris GPS; no personal media",
+      "sha256" : "742c53680e273f58984a578a876e29d995e01540a5e87ecc08f713ae2bb45f71"
+    },
+    {
+      "container" : "public.tiff",
+      "id" : "paris.tiff",
+      "license" : "MIT",
+      "origin" : "Generated geometric image; synthetic Paris GPS; no personal media",
+      "sha256" : "677b11b76779a8044affe986b9957a0480f3c8659c57d76826739d41b86acdbe"
+    },
+    {
+      "container" : "public.png",
+      "id" : "paris.png",
+      "license" : "MIT",
+      "origin" : "Generated geometric image; synthetic Paris GPS; no personal media",
+      "sha256" : "47ed21d9b7691bf7cbfc79d2625d9ca6dbac19f84e9946a344f694fdbbd450a1"
+    },
+    {
+      "container" : "MOV",
+      "id" : "paris.mov",
+      "license" : "MIT",
+      "origin" : "Generated two-frame H264 movie; synthetic Paris GPS; no personal media",
+      "sha256" : "a39b066dabcbf26f19924f863fea552fc241555afc81b8d86b5be4f8c90bd199"
+    }
+  ],
+  "note" : "Synthetic baseline fixtures do not qualify genuine Apple HDR\/depth\/Live Photo or camera RAW variants.",
+  "schema" : 1
+}

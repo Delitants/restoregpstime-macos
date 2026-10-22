@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "minimumMacOS": "13.0",
+  "dependencies": [
+    {
+      "name": "Perl", "version": "5.44.0",
+      "url": "https://www.cpan.org/src/5.0/perl-5.44.0.tar.gz",
+      "sha256": "3b855066b92491cb40e86affb1ca57d1a388aa43e51b91c7806a32c2f65f96c3",
+      "publisherChecksumURL": "https://www.cpan.org/src/5.0/perl-5.44.0.tar.gz.sha256.txt",
+      "licenseChoice": "Perl Artistic License", "sourceDirectory": "perl-5.44.0"
+    },
+    {
+      "name": "ExifTool", "version": "13.59",
+      "url": "https://codeload.github.com/exiftool/exiftool/tar.gz/refs/tags/13.59",
+      "sha256": "87d3317882fdae9cb4dcfe57a96a378d0132ffc02c731315bf128b19ddcf7aac",
+      "provenance": "Official exiftool/exiftool tag 13.59; SHA256 pinned from HTTPS archive, not an independent signature",
+      "licenseChoice": "Perl Artistic License per upstream README and exiftool copyright",
+      "sourceDirectory": "exiftool-13.59",
+      "geolocation": {"source": "Included Geolocation.dat", "minimumPopulation": 2000, "attribution": "GeoNames, Creative Commons Attribution"}
+    }
+  ]
+}

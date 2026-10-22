@@ -1,0 +1,7 @@
+.build/
+.swiftpm/
+.superpowers/
+work/
+outputs/releases/
+.DS_Store
+Tests/PrivateFixtures/

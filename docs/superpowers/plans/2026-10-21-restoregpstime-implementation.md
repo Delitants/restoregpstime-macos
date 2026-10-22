@@ -87,7 +87,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 
 ---
 
-### T01: Prove the native baseline and bundled runtime
+### Task 1: T01 — Prove the native baseline and bundled runtime
 
 **Files:** Create `Package.swift`, `.gitignore`, `App/Info.plist`, `Sources/RestoreGPSTime/AppMain.swift`, `Sources/RestoreGPSTimeCore/Runtime/{RuntimeLocator,ProcessRunner,RuntimeProbe}.swift`, `Sources/RestoreGPSTimeCore/Model/RestoreError.swift`, `Dependencies/dependencies.lock.json`, `Scripts/{prepare-dependencies,build-runtime,build-app}.sh`, `ThirdParty/NOTICES.txt`, `Tests/Fixtures/manifest.json`, `Tests/RestoreGPSTimeCoreTests/{RuntimeTests,Support/CoreTestCase}.swift`.
 
@@ -104,7 +104,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify the actual assembled app.** Run the focused tests, `Scripts/build-app.sh --arch arm64 --configuration debug --output work/build/arm64`, and the corresponding `x86_64` build. Inspect `file`, `lipo -archs`, `otool -L` and `vtool -show-build` for all native components. Launch ARM64 locally; label Intel execution through Rosetta separately. Repeat the runtime probe from a moved Unicode/spaced app path with network and host Perl access unavailable in the test harness. Record logs in `work/evidence/T01/`.
 - [ ] **5. Commit the baseline.** Stage the exact files above, notices and fixture provenance; commit `build: establish native app and bundled metadata runtime`. No external repository is created.
 
-### T02: Read metadata and discover operation capabilities
+### Task 2: T02 — Read metadata and discover operation capabilities
 
 **Files:** Create `Model/{FileSnapshot,MetadataDocument,MetadataMutation,Capabilities}.swift`, `Discovery/{SourceInventory,FileIdentityReader,MetadataReader,MetadataDecoder,CapabilityRegistry}.swift`, `Resources/container-capabilities.json`, `Tests/RestoreGPSTimeCoreTests/{DiscoveryTests,MetadataReaderTests,CapabilityTests}.swift`, `Tests/RestoreGPSTimeCoreTests/Support/MetadataFixtures.swift`.
 
@@ -123,7 +123,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify green on real temporary files and bundled-engine fixtures.** Repeat focused tests. Assert before/after source bytes, birth/modification dates and Finder/xattr state match for inspection; count active helpers and assert `maximumActive <= 2`.
 - [ ] **5. Commit.** `feat: inspect files and expose per-operation capabilities` with only the listed production/tests/registry changes.
 
-### T03: Resolve capture dates and all reference date sources
+### Task 3: T03 — Resolve capture dates and all reference date sources
 
 **Files:** Create `Model/{CaptureCandidate,DatePolicy,DateResolution,Clock}.swift`, `Dates/{CaptureDateResolver,WallClockParser,TimezoneResolver,ReferenceDateResolver,FilenameDateParser,DateMutationPlanner}.swift`, `Tests/RestoreGPSTimeCoreTests/{CaptureDateTests,TimezoneTests,ReferenceDateTests}.swift`.
 
@@ -141,7 +141,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify green and real tag round trips for available date sources.** Repeat focused tests with explicit source and fallback selection; assert the plan records tag, chosen instant, offset/zone policy and fractional precision. Use representative QuickTime fixtures whose UTC/local interpretations differ by a known offset.
 - [ ] **5. Commit.** `feat: resolve capture dates with explicit timezone policies`.
 
-### T04: Resolve offline places and plan location metadata
+### Task 4: T04 — Resolve offline places and plan location metadata
 
 **Files:** Create `Model/{PlaceMatch,PlaceQuery}.swift`, `Places/{OfflinePlaceResolver,PlaceCorrectionStore,LocationTagPlanner}.swift`, `Tests/RestoreGPSTimeCoreTests/{OfflinePlaceTests,LocationTagPlanTests}.swift`.
 
@@ -158,7 +158,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify green with network denied to the app/runtime.** Re-run the focused tests using the bundled database; record the data version and assert no network client is constructed. Missing database must error rather than switch to a service. Review attribution text and reports.
 - [ ] **5. Commit.** `feat: recover nearest place names offline`.
 
-### T05: Group linked assets and reserve collision-safe names
+### Task 5: T05 — Group linked assets and reserve collision-safe names
 
 **Files:** Create `Model/{AssetGroup,NameReservation}.swift`, `Naming/{AssetGrouper,NameTemplate,NameAllocator,VolumeNamingRules}.swift`, `Tests/RestoreGPSTimeCoreTests/{AssetGroupTests,NameAllocatorTests}.swift`.
 
@@ -175,7 +175,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify green.** Re-run the focused tests on case-sensitive and case-insensitive APFS test volumes where available; label injected volume-rule tests separately from actual filesystem evidence. Property-test that adding no inputs and changing no options produces identical reservations.
 - [ ] **5. Commit.** `feat: plan linked-asset renames without overwrites`.
 
-### T06: Freeze preview plans and mutation contracts
+### Task 6: T06 — Freeze preview plans and mutation contracts
 
 **Files:** Create `Model/{OperationRequest,MutationPlan,BatchPlan,BatchEvent}.swift`, `Planning/{BatchPlanner,PlanValidator}.swift`, `Transactions/MutationDriver.swift`, `Tests/RestoreGPSTimeCoreTests/{BatchPlannerTests,PlanValidationTests}.swift`.
 
@@ -193,7 +193,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify green.** Repeat focused tests; serialize/deserialize schema-1 plans and assert semantic equality. Confirm source changes, a different engine/database identity and new destination collisions invalidate execution rather than causing unpreviewed fallbacks.
 - [ ] **5. Commit.** `feat: freeze auditable batch previews`.
 
-### T07: Implement staged changes, journals and safe recovery
+### Task 7: T07 — Implement staged changes, journals and safe recovery
 
 **Files:** Create `Transactions/{BatchExecutor,RecoveryJournal,BackupStore,StageStore,Committer,RecoveryCoordinator,SourceRevalidator}.swift`, `Model/RecoveryRecord.swift`, `Tests/RestoreGPSTimeCoreTests/{CopyModeTests,InPlaceTests,CrashRecoveryTests,CancellationTests}.swift`, `Tests/RestoreGPSTimeCoreTests/Support/TransactionFaults.swift`; modify `Model/BatchEvent.swift` to add the completed group/report records.
 
@@ -211,7 +211,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify green and real filesystem behavior.** Repeat focused tests on APFS, a constrained/full test volume and supported removable-volume fixtures. Verify copy failure leaves original unchanged; source permission/lock handling follows the preview; incomplete journals appear after restart; recovery conflicts retain both the original backup and external newer data. Confirm user-only recovery permissions.
 - [ ] **5. Commit.** `feat: make batch edits recoverable through staged transactions`.
 
-### T08: Write and verify supported embedded metadata
+### Task 8: T08 — Write and verify supported embedded metadata
 
 **Files:** Create `Metadata/{ExifToolWriter,TagRegistry,MetadataMutationDriver,MediaIntegrityValidator,JPEGIntegrity,TIFFIntegrity,HEIFIntegrity,PNGIntegrity,WebPIntegrity,RAWIntegrity,VideoIntegrity,MetadataStripProfiles}.swift`, `Resources/writable-tags.json`, `Tests/RestoreGPSTimeCoreTests/{MetadataWriteTests,MetadataStripTests,MediaIntegrityTests}.swift`.
 
@@ -229,7 +229,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify green through T07 transactions.** Repeat focused tests with actual bundled ExifTool. Exercise Save Copies and in-place restore, CR3/HEIF structural exceptions, malformed media and deliberate payload corruption. Turn on registry write capabilities only for profiles with passed tag/payload evidence. Add source citations to format-specific rules.
 - [ ] **5. Commit.** `feat: write verified metadata without re-encoding media`.
 
-### T09: Complete filesystem/Finder actions and scoped cleanup
+### Task 9: T09 — Complete filesystem/Finder actions and scoped cleanup
 
 **Files:** Create `Attributes/{FileDateWriter,FinderAttributeWriter,LegacyFinderInfo,ScopedTrash,FinderNotifier,FinderVisibilityController,AttributeMutationDriver}.swift`, `Tests/RestoreGPSTimeCoreTests/{FileDateWriterTests,FinderAttributeTests,FinderVisibilityTests,ScopedTrashTests,ReferenceActionCoverageTests}.swift`.
 
@@ -251,7 +251,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify green on actual disposable files/folders.** Re-run focused tests, then semantically exercise all 31 action rows and two Tools rows. Test global Finder visibility only in an isolated qualification login/session whose use is explicitly authorized; snapshot its prior value, verify Show/Hide/Restore and read back restored state. Do not change this user's live Finder preferences merely to test. Record known unsupported filesystem/profile cases with expected reasons rather than removing their checks. Do not empty Trash or purge recovery evidence during verification.
 - [ ] **5. Commit.** `feat: complete Finder attributes and reference action coverage`.
 
-### T10: Build the native batch interface and recovery browser
+### Task 10: T10 — Build the native batch interface and recovery browser
 
 **Files:** Create `Sources/RestoreGPSTime/{AppModel,BatchTableView,SidebarView,InspectorView,DateOptionsView,PlaceOptionsView,MetadataOptionsView,FinderOptionsView,DestinationView,RecoveryView,ToolsCommands,ReportExporter}.swift`, original resources under `App/Resources/`, `Tests/RestoreGPSTimeAppTests/{AppModelTests,ReportExporterTests}.swift`, `docs/acceptance/ui-checks.md`; update `AppMain.swift` and bundle assembly.
 
@@ -267,7 +267,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify green and inspect the actual interface.** Run focused tests, then perform a documented native UI pass at 1100×720 and a larger window in light/dark appearance. Use the installed computer-use tool for UI interactions and screenshots. Check keyboard/VoiceOver labels, drop/import, preview, copy, in-place, cancellation, missing-runtime errors and recovery conflicts. Capture screenshots using only synthetic/redistributable fixture data; do not call model tests GUI acceptance.
 - [ ] **5. Commit.** `feat: add native batch preview and recovery interface`.
 
-### T11: Add workflows, droplets and Finder Services
+### Task 11: T11 — Add workflows, droplets and Finder Services
 
 **Files:** Create `Workflows/{WorkflowDocument,WorkflowStore,DropletExporter}.swift` under core, `Sources/RestoreGPSTime/{WorkflowView,DocumentImporter,ServicesProvider}.swift`, `Sources/RestoreGPSTimeDroplet/DropletMain.swift`, `Tests/RestoreGPSTimeCoreTests/{WorkflowTests,DropletTests}.swift`, `Tests/RestoreGPSTimeAppTests/ImportTests.swift`; update `Package.swift`, `Info.plist` and bundle resources.
 
@@ -284,7 +284,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Verify green and real OS integration.** Repeat focused tests and verify Services registration after installing the candidate in a disposable test location, Finder Open With, drag/drop, relaunch, missing-main-app behavior and moved droplets. Run each architecture natively before release; distinguish app-level model routing from actual Finder integration evidence.
 - [ ] **5. Commit.** `feat: add reusable workflows droplets and Finder Services`.
 
-### T12: Qualify real formats, failure handling and native hosts
+### Task 12: T12 — Qualify real formats, failure handling and native hosts
 
 **Files:** Create `Sources/RestoreGPSTimeQA/{QAMain,QualificationRunner}.swift`, `Scripts/{qualify,collect-evidence}.sh`, `docs/acceptance/{format-matrix,host-matrix,qualification-results}.json`, `Tests/RestoreGPSTimeCoreTests/{LargeBatchTests,FixtureRegressionTests}.swift`, local CI definition `.github/workflows/qualify.yml`; update fixture manifest and write profiles only with justified evidence.
 
@@ -300,7 +300,7 @@ Execute tasks in order. Each task is an independently reviewable deliverable wit
 - [ ] **4. Run the complete acceptance suite natively.** Execute `swift test`, qualification commands, manual UI/Services/droplet checks, offline relocated-bundle checks and Instruments main-thread tracing. Required host matrix: native ARM64/macOS 13, native Intel/macOS 13, and current supported OS on native ARM64/Intel. Capture source SHA, process architecture, hardware ARM capability, translation state (`sysctl.proc_translated` where present), OS/build, toolchain and fixture/dependency identities; reject Rosetta as native Intel evidence. A 10,000-item run must have no batch-work main-thread stall over 250 ms. Retain RED evidence; fix implementation/fixtures as justified, then rerun only affected gates before the final coherent regression pass.
 - [ ] **5. Commit verified evidence summaries and support matrix.** `test: qualify metadata recovery across formats and native architectures`. Private media, raw private paths, credentials and local-only reports remain outside Git. Any absent gate stays explicitly open and blocks stable publication.
 
-### T13: Package, sign and publish the two separate releases
+### Task 13: T13 — Package, sign and publish the two separate releases
 
 **Files:** Create `Scripts/{package,sign-and-notarize,check-release,publish-release}.sh`, `Scripts/release_gate.py`, `App/RestoreGPSTime.entitlements`, `docs/{INSTALL,RECOVERY,RELEASE}.md`, `LICENSE`, `CHANGELOG.md`, `Tests/ReleaseGateTests/test_release_gate.py`; update `README.md` to describe tested product behavior and the pinned dependency notices. Generate deliverables under `outputs/releases/` only during this task.
 

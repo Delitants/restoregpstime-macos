@@ -1,0 +1,20 @@
+RestoreGPSTime uses independently distributed third-party software.
+
+ExifTool 13.59 — Copyright 2003–2026 Phil Harvey.
+The upstream README and executable license ExifTool under the same terms as Perl,
+either the Perl Artistic License or GPL. This distribution chooses the Artistic
+License option for ExifTool. The upstream LICENSE and copyright notices are retained.
+Official source: https://github.com/exiftool/exiftool/tree/13.59
+
+Perl 5.44.0 — Copyright Larry Wall and contributors, as stated in the Perl source.
+Distributed under the Perl Artistic License option. License text and upstream
+copyright/copying information are retained in this directory.
+Official source: https://www.cpan.org/src/5.0/perl-5.44.0.tar.gz
+
+Offline city data — GeoNames, https://www.geonames.org/
+Creative Commons Attribution; data supplied by GeoNames and packaged by ExifTool.
+Data is approximate and supplied without a warranty of completeness or accuracy.
+https://www.geonames.org/export/
+
+The app performs no online geocoding. Source URLs, hashes and build provenance are
+recorded in Dependencies/dependencies.lock.json and the bundled runtime receipt.
