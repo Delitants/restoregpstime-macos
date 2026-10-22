@@ -4,6 +4,23 @@ import AppKit
 @testable import RestoreGPSTimeCore
 
 final class ImportTests:AppTestCase {
+    @MainActor func testWorkflowUsesConfiguredUndoStorageWithoutReusingOldDestinations() async throws {
+        let input=try item(),backend=FakeAppBackend(items:[input]),model=AppModel(backend:backend)
+        let automatic=workspace.appendingPathComponent("Automatic undo storage")
+        let importer=DocumentImporter(model:model,automaticRecoveryRoot:automatic)
+        model.options.outputRoot=workspace.appendingPathComponent("Old output")
+        model.options.recoveryRoot=workspace.appendingPathComponent("Old recovery")
+        model.options.mode = .modifyInPlace
+        let file=workspace.appendingPathComponent("Portable.rgtimeworkflow")
+        try WorkflowStore().save(.init(name:"Portable",request:model.request),to:file)
+        let result=await importer.open(urls:[file,input.snapshot.url])
+        XCTAssertTrue(result.errors.isEmpty)
+        XCTAssertEqual(model.options.mode,.saveCopies);XCTAssertNil(model.options.outputRoot)
+        XCTAssertEqual(model.options.recoveryRoot,automatic)
+        XCTAssertFalse(FileManager.default.fileExists(atPath:automatic.path))
+        XCTAssertFalse(model.canApply)
+        let executions=await backend.executions;XCTAssertEqual(executions,0)
+    }
     @MainActor func testOverlappingOpenRequestsAreQueuedWithoutSilentApply() async throws {
         let input=try item(),other=try item("second.jpg"),backend=FakeAppBackend(items:[input]),model=AppModel(backend:backend),session=AppSession(model:model)
         model.options.outputRoot=workspace.appendingPathComponent("Output");await backend.delayInspection()

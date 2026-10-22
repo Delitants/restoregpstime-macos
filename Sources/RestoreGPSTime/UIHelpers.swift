@@ -33,8 +33,8 @@ struct FolderChoice:View {
     @Binding var url:URL?
     var body:some View {
         VStack(alignment:.leading,spacing:5) {
-            HStack {Text(title).font(.headline);Spacer();Button("Choose…") {Task {if let selected=await Panels.folder(title:title,create:true) {url=selected}}}}
-            Text(url?.path ?? "Choose a folder").font(.caption).foregroundStyle(.secondary).lineLimit(2).textSelection(.enabled).help(url?.path ?? title)
+            HStack {Text(title).font(.headline);Spacer();Button("Choose folder") {Task {if let selected=await Panels.folder(title:title,create:true) {url=selected}}}.fixedSize()}
+            Text(url?.path ?? "No folder selected").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true).textSelection(.enabled).help(url?.path ?? title)
         }
     }
 }

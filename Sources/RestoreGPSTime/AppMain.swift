@@ -28,7 +28,7 @@ struct RestoreGPSTimeApp:App {
             .sheet(isPresented:$session.showScopedTrash) {ScopedTrashSheet(session:session)}
             .sheet(item:$session.finderTool) {tool in FinderToolSheet(session:session,tool:tool)}
             .alert("Tools",isPresented:Binding(get:{session.toolResult != nil},set:{if !$0 {session.toolResult=nil}})) {Button("OK") {session.toolResult=nil}} message:{Text(session.toolResult ?? "")}
-        }.defaultSize(width:1280,height:820)
+        }.defaultSize(width:1100,height:720)
         .commands {ToolsCommands(session:session)}
     }
 }

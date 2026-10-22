@@ -63,6 +63,14 @@ class AppTestCase:XCTestCase {
     }
 }
 final class AppModelTests:AppTestCase {
+    @MainActor func testFailedPreviewStopsBusyGuidanceAndNewSettingsClearItsIssue() async throws {
+        let input=try item(),backend=FakeAppBackend(items:[input]),model=AppModel(backend:backend)
+        await model.importURLs([input.snapshot.url]);await model.preview()
+        XCTAssertEqual(model.phase,.failed);XCTAssertNotNil(model.issue)
+        XCTAssertFalse(model.progress.contains("Building"));XCTAssertFalse(model.isBusy)
+        model.options.outputRoot=workspace.appendingPathComponent("Selected copies")
+        XCTAssertNil(model.issue);XCTAssertEqual(model.phase,.idle);XCTAssertFalse(model.canApply)
+    }
     @MainActor func testExcludedImportsRemainVisibleAfterPreview() async throws {
         let input=try item(),backend=FakeAppBackend(items:[input]),model=AppModel(backend:backend),excluded=workspace.appendingPathComponent("Unavailable.app")
         await backend.setExcluded([.init(url:excluded,reason:"Packages are excluded")]);model.options.outputRoot=workspace.appendingPathComponent("Output")

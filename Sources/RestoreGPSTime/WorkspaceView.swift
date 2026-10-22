@@ -7,16 +7,17 @@ struct WorkspaceView:View {
     @ObservedObject var model:AppModel
     @State private var section:WorkspaceSection? = .dates
     @State private var selection:String?
-    @State private var inspectorVisible=true
+    @State private var inspectorVisible=false
     @State private var dropTarget=false
     @State private var exportSheet=false
     @State private var includeCoordinates=false
+    private var utility:Bool {section?.isUtility ?? false}
     var body:some View {
         VStack(spacing:0) {
             if session.incompleteRecoveryCount>0 || session.recoveryNotice != nil {
                 HStack {
-                    Label(session.recoveryNotice ?? "\(session.incompleteRecoveryCount) incomplete recovery batches need review.",systemImage:"exclamationmark.arrow.triangle.2.circlepath").foregroundStyle(.orange).lineLimit(2)
-                    Spacer();Button("Review Recovery") {section = .recovery}
+                    Label(session.recoveryNotice ?? "\(session.incompleteRecoveryCount) incomplete batches need review.",systemImage:"exclamationmark.arrow.triangle.2.circlepath").foregroundStyle(.orange).lineLimit(2)
+                    Spacer();Button("Review backups") {section = .recovery}.fixedSize()
                 }.padding(10)
                 Divider()
             }
@@ -25,11 +26,15 @@ struct WorkspaceView:View {
                 VStack(spacing:0) {
                     importBar
                     Divider()
-                    BatchTableView(model:model,selection:$selection).frame(minHeight:180)
-                    Divider()
-                    optionsPanel.frame(minHeight:215,idealHeight:295,maxHeight:360)
-                }.frame(minWidth:570)
-                if inspectorVisible {InspectorView(model:model,row:model.rows.first {$0.id==selection}).disabled(model.isBusy)}
+                    if utility {
+                        ScrollView {sectionView.padding(24).frame(maxWidth:860,alignment:.leading).frame(maxWidth:.infinity,alignment:.leading)}.disabled(model.isBusy)
+                    } else {
+                        VSplitView {
+                            BatchTableView(model:model,selection:$selection).frame(minHeight:180)
+                            optionsPanel.frame(minHeight:190,idealHeight:300,maxHeight:380)
+                        }
+                    }
+                }.frame(minWidth:650)
             }
             Divider()
             footer
@@ -48,79 +53,90 @@ struct WorkspaceView:View {
                     }
                     if let url,url.isFileURL {urls.append(url)}
                 }
-                if !urls.isEmpty {_ = await session.openURLs(urls)}
+                if !urls.isEmpty {_ = await session.openURLs(urls);section = .dates}
             }
             return true
         }
         .overlay {if dropTarget {RoundedRectangle(cornerRadius:8).stroke(Color.accentColor,lineWidth:3).allowsHitTesting(false)}}
         .onChange(of:model.phase) {value in if value == .finished {Task {await session.refreshRecovery()}}}
         .onChange(of:model.options.recoveryRoot) {_ in Task {await session.refreshRecovery()}}
-        .toolbar {
-            ToolbarItem {Button {inspectorVisible.toggle()} label:{Label("Toggle Inspector",systemImage:"sidebar.right")}.help("Show or hide the file inspector")}
+        .onChange(of:model.discovery.includeFiles) {_ in refreshScope()}
+        .onChange(of:model.discovery.recursive) {_ in refreshScope()}
+        .onChange(of:model.discovery.includeFolders) {_ in refreshScope()}
+        .onChange(of:model.discovery.includeHidden) {_ in refreshScope()}
+        .sheet(isPresented:$importOptions) {
+            VStack(alignment:.leading,spacing:16) {
+                HStack {Text("Import options").font(.headline);Spacer();Button("Done") {importOptions=false}.fixedSize().keyboardShortcut(.cancelAction)}
+                Toggle("Include files",isOn:$model.discovery.includeFiles).disabled(model.isBusy)
+                Toggle("Include subfolders",isOn:$model.discovery.recursive).disabled(model.isBusy)
+                Toggle("Include folders themselves",isOn:$model.discovery.includeFolders).disabled(model.isBusy)
+                Toggle("Include hidden files",isOn:$model.discovery.includeHidden).disabled(model.isBusy)
+                Text("Packages, symlinks, unavailable cloud files, and private transaction folders are excluded.").font(.caption).foregroundStyle(.secondary)
+            }.padding(24).frame(width:440)
+        }
+        .sheet(isPresented:$inspectorVisible) {
+            VStack(spacing:0) {
+                HStack {Text("File details").font(.headline);Spacer();Button("Done") {inspectorVisible=false}.fixedSize().keyboardShortcut(.cancelAction)}.padding(16)
+                Divider()
+                InspectorView(model:model,row:model.rows.first {$0.id==selection}).disabled(model.isBusy)
+            }.frame(width:600,height:640)
         }
         .sheet(isPresented:$exportSheet) {
             VStack(alignment:.leading,spacing:16) {
                 Text("Export batch report").font(.title2.bold())
                 Text("Save a local JSON or CSV report. File paths, selected changes, place names, errors, and recovery references are included.")
                 Toggle("Include coordinate fields",isOn:$includeCoordinates)
-                HStack {Button("Cancel") {exportSheet=false}.keyboardShortcut(.cancelAction);Spacer();Button("Choose File…") {Task {await export()}}.keyboardShortcut(.defaultAction)}
+                HStack {Button("Cancel") {exportSheet=false}.fixedSize().keyboardShortcut(.cancelAction);Spacer();Button("Choose File…") {Task {await export()}}.fixedSize().keyboardShortcut(.defaultAction)}
             }.padding(24).frame(width:460)
         }
     }
     private var importBar:some View {
         HStack(spacing:12) {
-            Button {Task {_ = await session.openURLs(await Panels.importFiles())}} label:{Label("Add Files…",systemImage:"plus")}.keyboardShortcut("o").disabled(model.isBusy)
-            Button("Refresh") {Task {await model.importURLs([])}}.disabled(model.isBusy || model.rows.isEmpty)
-            Button("Clear") {model.clear();selection=nil}.disabled(model.isBusy || model.rows.isEmpty)
+            Button {Task {let urls=await Panels.importFiles();if !urls.isEmpty {_ = await session.openURLs(urls);section = .dates}}} label:{Label("Add files",systemImage:"plus")}.fixedSize().keyboardShortcut("o").disabled(model.isBusy)
+            Text("\(model.rows.count) files").font(.caption).foregroundStyle(.secondary)
             Spacer()
-            Text("\(model.rows.count) items").font(.caption).foregroundStyle(.secondary)
+            if utility {Button("Back to batch") {section = .dates}.fixedSize()}
+            else {Button {inspectorVisible=true} label:{Label("File details",systemImage:"info.circle")}.fixedSize().disabled(selection==nil).keyboardShortcut("i")}
+            Menu("More") {
+                Button("Refresh files") {Task {await model.importURLs([])}}.disabled(model.isBusy || model.rows.isEmpty)
+                Button("Clear file list") {model.clear();selection=nil}.disabled(model.isBusy || model.rows.isEmpty)
+                Divider()
+                Button("Export report") {includeCoordinates=false;exportSheet=true}.disabled(model.report==nil || model.isBusy)
+                Button("Import options") {importOptions.toggle()}
+            }.fixedSize()
         }.padding(12)
     }
+    @State private var importOptions=false
     private var optionsPanel:some View {
-        HSplitView {
-            ScrollView {
-                VStack(alignment:.leading,spacing:14) {
-                    switch section ?? .dates {
-                    case .dates:DateOptionsView(model:model)
-                    case .places:PlaceOptionsView(model:model)
-                    case .metadata:MetadataOptionsView(model:model)
-                    case .finder:FinderOptionsView(model:model)
-                    case .recovery:RecoveryView(model:model)
-                    case .workflows:WorkflowView(session:session,model:model)
-                    }
-                }.padding(16)
-            }.frame(minWidth:300).disabled(model.isBusy)
-            ScrollView {
-                VStack(alignment:.leading,spacing:14) {
-                    DestinationView(model:model)
-                    DisclosureGroup("Import scope") {
-                        VStack(alignment:.leading) {
-                            Toggle("Include files",isOn:$model.discovery.includeFiles)
-                            Toggle("Include subfolders",isOn:$model.discovery.recursive)
-                            Toggle("Include folders themselves",isOn:$model.discovery.includeFolders)
-                            Toggle("Include hidden files",isOn:$model.discovery.includeHidden)
-                            Text("Packages, symlinks, unavailable cloud files, and private transaction folders are excluded.").font(.caption).foregroundStyle(.secondary)
-                        }.padding(.top,8)
-                    }
-                }.padding(16)
-            }.frame(minWidth:250,idealWidth:290,maxWidth:360).disabled(model.isBusy)
+        ScrollView {
+            VStack(alignment:.leading,spacing:20) {
+                DestinationView(model:model)
+                Divider()
+                sectionView
+            }.padding(20).frame(maxWidth:860,alignment:.leading).frame(maxWidth:.infinity,alignment:.leading)
+        }.disabled(model.isBusy)
+    }
+    @ViewBuilder private var sectionView:some View {
+        switch section ?? .dates {
+        case .dates:DateOptionsView(model:model).frame(maxWidth:650,alignment:.leading)
+        case .places:PlaceOptionsView(model:model).frame(maxWidth:650,alignment:.leading)
+        case .metadata:MetadataOptionsView(model:model).frame(maxWidth:650,alignment:.leading)
+        case .finder:FinderOptionsView(model:model).frame(maxWidth:650,alignment:.leading)
+        case .recovery:RecoveryView(model:model)
+        case .workflows:WorkflowView(session:session,model:model)
         }
-        .onChange(of:model.discovery.includeFiles) {_ in refreshScope()}
-        .onChange(of:model.discovery.recursive) {_ in refreshScope()}
-        .onChange(of:model.discovery.includeFolders) {_ in refreshScope()}
-        .onChange(of:model.discovery.includeHidden) {_ in refreshScope()}
     }
     private var footer:some View {
         VStack(alignment:.leading,spacing:7) {
             if let issue=model.issue {ScrollView {Text(issue).font(.callout).foregroundStyle(.orange).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)}.frame(maxHeight:65)}
             HStack(spacing:12) {
                 if model.isBusy {ProgressView().controlSize(.small)}
-                VStack(alignment:.leading,spacing:3) {Text(model.progress.isEmpty ? "Add files, choose options, then preview changes.":model.progress).lineLimit(2);Text(session.runtimeDescription).font(.caption).foregroundStyle(.secondary)}
-                Spacer()
-                Button("Export Report…") {includeCoordinates=false;exportSheet=true}.disabled(model.report==nil || model.isBusy)
-                Button("Cancel") {model.cancel()}.disabled(!model.isBusy || model.phase == .recovering || model.phase == .cancelling)
-                Button("Preview Changes") {Task {await model.preview()}}.disabled(model.rows.isEmpty || model.isBusy).keyboardShortcut("p",modifiers:[.command,.shift])
-                Button(model.options.mode == .saveCopies ? "Save Copies":"Modify in Place") {Task {await model.applyPreview()}}.disabled(!model.canApply).buttonStyle(.borderedProminent)
+                Text(model.progress.isEmpty ? "Add files, choose settings, then preview.":model.progress).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
+                if model.isBusy {Button("Cancel") {model.cancel()}.fixedSize().disabled(model.phase == .recovering || model.phase == .cancelling)}
+                if !utility {
+                    Button("Preview changes") {Task {await model.preview()}}.fixedSize().disabled(model.rows.isEmpty || model.isBusy).keyboardShortcut("p",modifiers:[.command,.shift])
+                    Button(model.options.mode == .saveCopies ? "Save copies":"Change originals") {Task {await model.applyPreview()}}.fixedSize().disabled(!model.canApply).buttonStyle(.borderedProminent)
+                }
             }
         }.padding(12)
     }

@@ -11,7 +11,6 @@ struct InspectorView:View {
     var body:some View {
         ScrollView {
             VStack(alignment:.leading,spacing:12) {
-                Text("File inspector").font(.headline)
                 if let row {
                     Text(row.fileName).font(.title3).textSelection(.enabled)
                     Text(row.url.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
@@ -20,7 +19,7 @@ struct InspectorView:View {
                         Text("Format: \(item.metadata.profile.identifier)").font(.caption)
                         detail("Current creation",displayDate(item.snapshot.creationDate));detail("Current modification",displayDate(item.snapshot.modificationDate))
                         if let plan=row.planned {
-                            Divider();Text("Frozen preview").font(.headline)
+                            Divider();Text("Previewed changes").font(.headline)
                             detail("Output",plan.name.finalURL.path)
                             detail("Proposed creation",displayDate(plan.mutation.dates?.creationDate));detail("Proposed modification",displayDate(plan.mutation.dates?.modificationDate))
                             if let resolution=plan.resolution {detail("Date source",resolution.source);detail("Original date",resolution.original);detail("Interpretation",resolution.interpretation);ForEach(resolution.warnings,id:\.self) {Text($0).font(.caption).foregroundStyle(.orange)}}
@@ -29,7 +28,7 @@ struct InspectorView:View {
                             if let candidates=plan.placeCandidates,candidates.count>1 {
                                 DisclosureGroup("Other nearby places") {
                                     ForEach(Array(candidates.enumerated()),id:\.offset) {_,candidate in
-                                        Button(candidate.displayName+(candidate.distanceKM.map {String(format:" (%.2f km)",$0)} ?? "")) {model.request.placeOverrides[item.snapshot.id.physicalKey]=candidate}
+                                        Button {model.request.placeOverrides[item.snapshot.id.physicalKey]=candidate} label:{Text(candidate.displayName+(candidate.distanceKM.map {String(format:" (%.2f km)",$0)} ?? "")).multilineTextAlignment(.leading).fixedSize(horizontal:false,vertical:true)}.buttonStyle(.borderless)
                                     }
                                 }
                             }
@@ -40,7 +39,9 @@ struct InspectorView:View {
                                     }
                                 }
                             }
-                            ForEach(plan.capabilities.keys.sorted(),id:\.self) {key in if let decision=plan.capabilities[key] {detail(key,String(describing:decision))}}
+                            DisclosureGroup("Supported changes") {
+                                ForEach(plan.capabilities.keys.sorted(),id:\.self) {key in if let decision=plan.capabilities[key] {detail(capabilityTitle(key),decision.isSupported ? "Supported":decision.reason)}}
+                            }
                         }
                         Divider()
                         DisclosureGroup("Correct place name") {
@@ -69,10 +70,11 @@ struct InspectorView:View {
                     }
                 } else {Text("Select a row to review its source metadata, date interpretation, place estimate, and proposed changes.").foregroundStyle(.secondary)}
             }.padding(16)
-        }.frame(minWidth:250,idealWidth:285,maxWidth:380)
+        }.frame(maxWidth:.infinity,maxHeight:.infinity)
         .onAppear(perform:loadCorrection).onChange(of:row?.id) {_ in loadCorrection()}
         .accessibilityLabel("Selected file details")
     }
     private func detail(_ title:String,_ value:String)->some View {VStack(alignment:.leading,spacing:3) {Text(title).font(.caption).foregroundStyle(.secondary);Text(value).font(.caption).textSelection(.enabled).fixedSize(horizontal:false,vertical:true)}}
+    private func capabilityTitle(_ key:String)->String {["embeddedWrite":"Embedded metadata","filesystemDates":"File dates","rename":"Filename","xmpSidecar":"XMP sidecar","finderAttributes":"Finder attributes","trash":"Move to Trash"][key] ?? key}
     private func loadCorrection() {let place=row?.item.flatMap {model.request.placeOverrides[$0.snapshot.id.physicalKey]} ?? row?.planned?.place;city=place?.city ?? "";country=place?.country ?? "";region=place?.region ?? "";countryCode=place?.countryCode ?? ""}
 }

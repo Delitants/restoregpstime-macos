@@ -5,8 +5,9 @@ struct ImportOutcome:Sendable {let errors:[String]}
 private struct PreparedImport:Sendable {let workflow:WorkflowDocument?,urls:[URL],replaceBatch:Bool}
 @MainActor final class DocumentImporter {
     let model:AppModel
+    private let automaticRecoveryRoot:URL?
     private var importing=false
-    init(model:AppModel) {self.model=model}
+    init(model:AppModel,automaticRecoveryRoot:URL?=nil) {self.model=model;self.automaticRecoveryRoot=automaticRecoveryRoot}
     func open(urls:[URL]) async -> ImportOutcome {
         guard !model.isBusy,!importing else {return .init(errors:["Finish or cancel the current operation before opening another import."])}
         guard !urls.isEmpty else {return .init(errors:[])}
@@ -17,7 +18,7 @@ private struct PreparedImport:Sendable {let workflow:WorkflowDocument?,urls:[URL
             if prepared.replaceBatch {model.clear()}
             if let workflow=prepared.workflow {
                 model.request=workflow.request
-                var options=BatchOptions();options.importRoots=model.options.importRoots;model.options=options
+                var options=BatchOptions();options.importRoots=model.options.importRoots;options.recoveryRoot=automaticRecoveryRoot;model.options=options
             }
             if !prepared.urls.isEmpty {await model.importURLs(prepared.urls)}
             if !model.rows.isEmpty {await model.preview()}

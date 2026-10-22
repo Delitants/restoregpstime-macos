@@ -6,10 +6,10 @@ For a completed stable release, verify the archive against `SHA256SUMS.txt`, ope
 
 The metadata engine, Perl runtime and offline place database are bundled. No Homebrew, separate Perl, online map, account or location permission is required. All media processing and coordinate lookup stay on the Mac.
 
-Start with disposable copies. Add files or folders, choose operations and explicit camera/output time-zone rules, select **Save Copies** and choose output/recovery folders. Preview and review date provenance, approximate place and distance, metadata destinations, grouped assets and resulting names. Apply uses that frozen preview. Changing options invalidates it. In-place processing retains originals for recovery.
+Start with disposable copies. Add files or folders, choose operations and explicit camera/output time-zone rules, select **Save copies** and choose **Save copies to**. Undo records are managed automatically; you do not choose a second destination. Use **Preview changes**, then select a row and open **File details** to review date provenance, approximate place and distance, metadata destinations, grouped assets and resulting names. Apply uses that frozen preview. Changing options invalidates it. **Change originals** retains originals for undo. A custom **Originals backup** folder is available under **Advanced backup settings**. Open **More tools → Backups & undo** to manage retained batches.
 
 Location matches are nearby populated places, not verified addresses or GPS accuracy corrections. Set the maximum distance and choose a candidate or manual correction. Missing GPS/capture metadata remains visible; the app does not invent it.
 
 Workflows contain data-only operation settings. Opened workflows, Services input and exported droplets bring files to review; they never apply automatically. A droplet needs the main application installed. Finder visibility and hidden-file Trash are separate Tools actions with explicit previews.
 
-Reports are local JSON/CSV exports. Coordinates are omitted by default; paths, place names, selected changes and recovery references are included. Share only a report you have reviewed.
+Use **More → Export report** for a local JSON/CSV export. Coordinates are omitted by default; paths, place names, selected changes and recovery references are included. Share only a report you have reviewed.

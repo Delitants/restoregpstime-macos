@@ -14,7 +14,7 @@ struct WorkflowView:View {
             Text("Saved workflows").font(.headline)
             TextField("Workflow name",text:$name)
             Text("Save the current date, place, metadata, and naming settings. Source files, per-file corrections, and destination or recovery paths are omitted.").font(.caption).foregroundStyle(.secondary)
-            HStack {Button("Save Workflow…") {Task {await save()}};Button("Open Workflow…") {Task {await load()}};Button("Export Droplet…") {Task {await droplet()}}}.disabled(working || model.isBusy)
+            HStack {Button("Save Workflow…") {Task {await save()}};Button("Open Workflow…") {Task {await load()}};Button("Export Droplet…") {Task {await droplet()}}}.fixedSize(horizontal:true,vertical:false).disabled(working || model.isBusy)
             if working {ProgressView().controlSize(.small)}
             if let message {Text(message).font(.callout).textSelection(.enabled)}
             Divider()
@@ -32,7 +32,7 @@ struct WorkflowView:View {
         let panel=NSOpenPanel();panel.title="Open a RestoreGPSTime workflow";panel.allowedContentTypes=[UTType(filenameExtension:"rgtimeworkflow") ?? .data]
         guard await panel.begin() == .OK,let url=panel.url else {return}
         working=true;defer {working=false}
-        let result=await session.openURLs([url]);message=result.errors.isEmpty ? "Workflow loaded. Select output and recovery folders, then preview.":result.errors.joined(separator:"\n")
+        let result=await session.openURLs([url]);message=result.errors.isEmpty ? "Workflow loaded. Choose where to save copies, then preview. Undo storage is managed automatically.":result.errors.joined(separator:"\n")
     }
     private func droplet() async {
         let panel=NSSavePanel();panel.title="Export a local droplet";panel.nameFieldStringValue="RestoreGPSTime Workflow.app";panel.allowedContentTypes=[.applicationBundle]

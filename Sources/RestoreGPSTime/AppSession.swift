@@ -24,7 +24,7 @@ import RestoreGPSTimeCore
     init(model:AppModel?=nil) {
         supportRoot=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("RestoreGPSTime",isDirectory:true)
         finder=FinderVisibilityController(backend:SystemFinderVisibilityBackend(),recordURL:supportRoot.appendingPathComponent("finder-visibility.json"))
-        self.model=model;if let model {importer=DocumentImporter(model:model)}
+        self.model=model;if let model {importer=DocumentImporter(model:model,automaticRecoveryRoot:supportRoot.appendingPathComponent("Recovery",isDirectory:true))}
     }
     func start() async {
         guard !starting,model==nil else {return};starting=true;defer {starting=false};runtimeIssue=nil
@@ -35,7 +35,7 @@ import RestoreGPSTimeCore
             model.options.recoveryRoot=supportRoot.appendingPathComponent("Recovery",isDirectory:true)
             runtimeDescription="ExifTool \(identity.exifToolVersion) • Offline locations • \(identity.architecture)"
             self.model=model
-            importer=DocumentImporter(model:model)
+            importer=DocumentImporter(model:model,automaticRecoveryRoot:supportRoot.appendingPathComponent("Recovery",isDirectory:true))
             let services=ServicesProvider(session:self);self.services=services;NSApp.servicesProvider=services
             await refreshRecovery()
             let imports=pendingImports;pendingImports=[]

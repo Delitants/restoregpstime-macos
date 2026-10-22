@@ -19,17 +19,21 @@ struct DateOptionsView:View {
                     model.request.dates=date
                 })) {ForEach(sources,id:\.self) {Text($0)}}
                 sourceDetails
-                TextField("Camera / output zone (e.g. Europe/Paris)",text:Binding(get:{policy.timeZoneID ?? ""},set:{model.request.dates?.timeZoneID=$0.isEmpty ? nil:$0}))
-                    .help("Required for offset-free capture dates. Also selects the embedded output zone for absolute date sources.")
-                Picker("QuickTime integer dates",selection:$model.request.dates.field(\.quickTime,default:nil)) {
-                    Text("Require a choice").tag(Optional<QuickTimeInterpretation>.none)
-                    Text("Interpret as UTC").tag(Optional(QuickTimeInterpretation.utc))
-                    Text("Camera local time in selected zone").tag(Optional(QuickTimeInterpretation.cameraLocal))
-                }
-                Picker("Repeated local hour (DST)",selection:$model.request.dates.field(\.dstChoice,default:nil)) {
-                    Text("Require a choice").tag(Optional<DSTChoice>.none);Text("Earlier occurrence").tag(Optional(DSTChoice.earlier));Text("Later occurrence").tag(Optional(DSTChoice.later))
-                }
                 HStack {target("Creation",.creation);target("Modification",.modification);target("Capture tags",.capture)}
+                DisclosureGroup("Time zone and video settings") {
+                    VStack(alignment:.leading,spacing:10) {
+                        TextField("Camera / output zone (e.g. Europe/Paris)",text:Binding(get:{policy.timeZoneID ?? ""},set:{model.request.dates?.timeZoneID=$0.isEmpty ? nil:$0}))
+                            .help("Required for offset-free capture dates. Also selects the embedded output zone for absolute date sources.")
+                        Picker("QuickTime integer dates",selection:$model.request.dates.field(\.quickTime,default:nil)) {
+                            Text("Require a choice").tag(Optional<QuickTimeInterpretation>.none)
+                            Text("Interpret as UTC").tag(Optional(QuickTimeInterpretation.utc))
+                            Text("Camera local time in selected zone").tag(Optional(QuickTimeInterpretation.cameraLocal))
+                        }
+                        Picker("Repeated local hour (DST)",selection:$model.request.dates.field(\.dstChoice,default:nil)) {
+                            Text("Require a choice").tag(Optional<DSTChoice>.none);Text("Earlier occurrence").tag(Optional(DSTChoice.earlier));Text("Later occurrence").tag(Optional(DSTChoice.later))
+                        }
+                    }.padding(.top,8)
+                }
                 DisclosureGroup("Shift, sequence, and removal") {
                     VStack(alignment:.leading,spacing:10) {
                         TextField("Shift (seconds)",value:$model.request.dates.field(\.shiftSeconds,default:0),format:.number.precision(.fractionLength(0...9)))

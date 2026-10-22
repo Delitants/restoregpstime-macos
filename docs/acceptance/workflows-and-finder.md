@@ -6,7 +6,7 @@ Implemented data paths are independently tested. The unlocked ARM64/macOS 27 nat
 
 Schema 1 `.rgtimeworkflow` documents contain only the workflow name and portable operation settings. Per-file place corrections, physical source identities, grouping overrides, input paths, output/recovery/reference roots, and previously read metadata are omitted. Loading rejects future schema versions, unknown nested fields, executable instructions, invalid tag operations, and path-producing rename templates. A file is bounded to one MiB and read without following a final symlink.
 
-Import validates the whole request before changing the current batch. Imported workflows reset to Save Copies and require destination/reference selections. Opening a workflow/droplet attempts preview and leaves Apply untouched. Before an output folder is selected, the batch displays the required-folder error rather than inventing an output anchor.
+Import validates the whole request before changing the current batch. Imported workflows reset to Save Copies and require destination/reference selections. The main app supplies its trusted managed undo-storage root; a workflow cannot import a machine-specific storage path. Lower-level import adapters without a configured default still require an explicit recovery root. Opening a workflow/droplet attempts preview and leaves Apply untouched. Before an output folder is selected, the batch displays the required-folder error rather than inventing an output anchor.
 
 ## Droplets
 

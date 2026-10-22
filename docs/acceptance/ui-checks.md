@@ -15,9 +15,9 @@ Use only `Tests/Fixtures` generated media, copied to a fresh private `work/ui-qa
 
 | Check | Evidence / state |
 |---|---|
-| 1100 × 720 and larger window | pending screenshots |
-| Light and dark appearance | Light and app-local Dark observed at 1280 × 820; screenshots retained privately. Smaller window still pending. |
-| Table horizontal scrolling and sorting; collapsible inspector | pending native interaction |
+| Minimum and larger window | Simplified layout observed at 1100 × 720 content (1100 × 748 including native title bar) and 1280 × 820. Main, workflow, undo and file-details button words remain fully visible. |
+| Light and dark appearance | Light and app-local Dark observed at minimum width; larger Light layout also observed. Screenshots retained privately. |
+| Table horizontal scrolling and sorting; on-demand details | File-details sheet opens and closes without narrowing the table. Native sorting/scroll acceptance remains partial. |
 | Keyboard import and preview; accessibility labels and focus | Command-O import and Command-Shift-P preview passed; accessibility text observed. VoiceOver and full focus traversal remain pending. |
 | File and folder import; drag and drop; recursion and exclusions | Native single-file and folder import passed; drop/recursion/exclusion interaction remains pending. |
 | Capture zone and QuickTime interpretation; preview invalidation | Explicit-offset interpretation and option/correction invalidation passed; offset-free/QuickTime/DST choices remain pending. |
@@ -37,3 +37,11 @@ Native inspection exposed missing AM/PM in a 12-hour locale. `DisplayDateTests` 
 Workflow export/reload also passed: the document omitted source/destination/recovery paths and manual overrides, reload reset Save Copies, cleared both destinations and left Apply disabled. No system appearance, Finder visibility preference, Finder restart, or Gatekeeper policy was changed.
 
 Native Finder preference mutation/restart qualification requires the isolated login/session recorded in the host acceptance matrix. Native Intel and macOS 13 qualification remain separate gates.
+
+## Approved interface simplification
+
+The 2026-10-22 bounded UI revision was explicitly approved in chat. The file list is wider, File details is a separate on-demand sheet, settings use one column, and More tools groups secondary screens. Save copies shows only Save copies to. Change originals explains automatic backups and places Originals backup under Advanced backup settings. Backups & undo and Workflows use the full content area. More holds refresh, clear, import options and report actions. Buttons reserve their label widths; advanced metadata/time-zone/naming options are disclosed on demand.
+
+The main app configures trusted automatic undo storage when loading portable workflows. The document still cannot supply source/destination/backup paths, resets Save Copies and cannot apply automatically. A regression first failed on missing automatic storage, then passed. Native inspection also reproduced stale Building a preview/missing-destination text after failure and after selecting a folder. The added regression failed three assertions, then the model fix passed all 26 app cases: stopped preview has honest guidance, changing settings clears the stale issue and requires a fresh preview.
+
+The simplified native QA build saved five generated date/location/rename copies, kept three baseline files blocked, and left all eight original hashes unchanged. Creation/mtime readback matched the known EXIF instant. Main save modes, full workflow/undo button labels, the File details sheet, report access with coordinates default-off, and app-local Dark were observed. A separate QA bundle identity was used only to avoid existing window-restoration preferences when measuring the minimum default; its app executable and runtime were unchanged. This is smoke evidence, not complete host/format/VoiceOver/Instruments/distribution qualification.

@@ -45,7 +45,11 @@ struct MediaRow:Identifiable {
     private func invalidatePreview() {
         revision+=1;plan=nil;previewRevision=nil
         if phase == .planning || phase == .importing {cancelWork?();phase = .idle}
-        if phase == .ready {phase = .idle}
+        if !isBusy {
+            issue=nil
+            if [.ready,.failed,.finished].contains(phase) {phase = .idle}
+            if !items.isEmpty {progress="Settings changed. Preview again."}
+        }
         rows=rows.filter {row in row.item.map {item in row.id==item.snapshot.id.physicalKey} ?? true}.map {row in
             var value=row;value.planned=nil;value.groupID=nil
             if ["eligible","blocked"].contains(value.status) {value.status="imported";value.issue=nil}
@@ -69,7 +73,7 @@ struct MediaRow:Identifiable {
             rows=result.items.map {.init(id:$0.snapshot.id.physicalKey,url:$0.snapshot.url,item:$0,status:"imported")}
             rows+=result.excluded.map {.init(id:"excluded:"+$0.url.standardizedFileURL.path,url:$0.url,item:nil,status:"excluded",issue:$0.reason)}
             phase = .idle;progress="\(result.items.count) items imported; \(result.excluded.count) excluded"
-        } catch {if ticket==revision {phase = task.isCancelled ? .idle:.failed;issue=task.isCancelled ? nil:error.localizedDescription}}
+        } catch {if ticket==revision {phase = task.isCancelled ? .idle:.failed;issue=task.isCancelled ? nil:error.localizedDescription;progress=task.isCancelled ? "Import cancelled.":"Import needs attention."}}
         if ticket==revision {cancelWork=nil}
     }
     func preview() async {
@@ -83,7 +87,7 @@ struct MediaRow:Identifiable {
             guard ticket==revision,!task.isCancelled else {return}
             plan=value;previewRevision=ticket;show(value);phase = .ready
             progress="\(value.eligibleGroups.count) eligible asset groups; \(value.groups.filter {$0.eligibility == .blocked}.count) blocked"
-        } catch {if ticket==revision {phase = task.isCancelled ? .idle:.failed;issue=task.isCancelled ? nil:error.localizedDescription}}
+        } catch {if ticket==revision {phase = task.isCancelled ? .idle:.failed;issue=task.isCancelled ? nil:error.localizedDescription;progress=task.isCancelled ? "Preview cancelled.":"Preview needs attention."}}
         if ticket==revision {cancelWork=nil}
     }
     private func show(_ plan:BatchPlan) {
