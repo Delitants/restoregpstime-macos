@@ -1,79 +1,31 @@
 # RestoreGPSTime
 
-Original native macOS utility for restoring photo/video file dates and place names. Separate Apple Silicon and Intel builds target macOS 13+. Version 0.2.0 is available as self-signed preview releases.
+Restore photo and video dates from metadata, recover place names from GPS, and rename files in batches. Works offline on macOS 13+.
 
-## Downloads
+## Download
 
-| Mac | Release |
-| --- | --- |
-| Apple Silicon (arm64) | [0.2.0 Apple Silicon — self-signed preview](https://github.com/Delitants/restoregpstime-macos/releases/tag/v0.2.0-selfsigned-arm64) |
-| Intel (x86_64) | [0.2.0 Intel — self-signed preview](https://github.com/Delitants/restoregpstime-macos/releases/tag/v0.2.0-selfsigned-x86_64) |
+**Version 0.2.0:** [Apple Silicon](https://github.com/Delitants/restoregpstime-macos/releases/tag/v0.2.0-selfsigned-arm64) · [Intel](https://github.com/Delitants/restoregpstime-macos/releases/tag/v0.2.0-selfsigned-x86_64)
 
-These builds are **self-signed and unnotarized**. macOS may block downloaded copies or show an unidentified-developer warning. Each release includes its ZIP, public certificate, checksums, installation notes and verification details. Apple Silicon was tested natively; Intel was tested through Rosetta on Apple Silicon. Physical Intel and macOS 13 host testing remain pending. See [installation](docs/INSTALL.md).
-
-### First launch
-
-If macOS says **“Apple could not verify … free of malware”**, the alert may offer **Move to Trash** and **Done**. To approve your verified download:
-
-1. Choose **Done** (or **Cancel**) to keep the app.
-2. Open **System Settings → Privacy & Security**, scroll to Security, and click **Open Anyway** for RestoreGPSTime.
-3. Confirm with **Open**, authenticating if requested.
-
-This saves an exception for the app. Recent macOS versions require this Settings step; the app cannot add an Open button to the initial warning. See [Apple’s instructions](https://support.apple.com/en-us/102445). A self-signed certificate does not provide Apple notarization. If the alert instead says **“is damaged”** or **“will damage your computer”**, report the exact message before proceeding.
-
-## Screenshots
-
-**Independent date and location previews**
-
-Both tabs keep their reviewed results; Apply Changes combines the selected actions. No output folder is needed to preview.
-
-![RestoreGPSTime showing retained date and place-name previews and green proposed columns](docs/images/independent-previews.jpg)
-
-**Optional thumbnails**
-
-Thumbnails default to Off, with Small, Medium and Large sizes available.
-
-![RestoreGPSTime showing optional small thumbnails](docs/images/optional-thumbnails.jpg)
-
-Captured from the 0.2.0 development QA app using disposable demo files with generated metadata.
+Self-signed and unnotarized. If macOS blocks the first launch, use **System Settings → Privacy & Security → Open Anyway**.
 
 ## Features
 
-Restore creation and modification dates from qualified EXIF/XMP/QuickTime capture metadata, explicit date sources, reference files, filenames, shifts or sequences. Resolve existing GPS coordinates to approximate city/country names offline, review distance and alternatives, correct a place manually, write qualified comments/structured metadata or rename files with collision-safe numbering.
+- Restore creation and modification dates from EXIF/GPS metadata.
+- Look up city and country names offline; write names or rename files with numbering.
+- Batch processing for photos, videos and RAW files, including Nikon NEF/NRW.
+- Save copies or modify originals, with metadata-only or full backups and undo.
+- Optional thumbnails and remembered settings.
 
-The app keeps separate previews for **Dates & time**, **Location names**, **Metadata**, and **Finder attributes**. Preview the selected actions in their own tabs; switching tabs keeps the results. **Apply Changes** combines all selected, current previews. Editing a tab makes that tab stale. Preview works before choosing an output folder; Save copies asks for its destination when applying. Proposed creation dates and names are highlighted in green. Optional thumbnails have three sizes and default to Off. Settings are remembered across launches.
+## Use
 
-In-place changes default to **Metadata backup**: a private compact database stores exact undo information, without retaining entire original media after a successful commit. Byte-exact undo requires the unchanged processed media. **Full backup** retains entire originals; **No backup** disables undo after a completed batch. Backups & undo supports individual files and whole batches; linked photo/video groups restore together. Temporary protection is retained during unfinished transactions.
+Add files, preview each selected tab, then click **Apply Changes**. Choose the copies folder when applying.
 
-Metadata reading uses bounded batches with at most two helpers. Counted progress shows metadata reading, file-content checks and planning. **Review blocked reasons** summarizes affected asset groups; select a row and open **File details** for its exact reason. **Handle missing UTC offsets automatically** is enabled by default. Embedded offsets take priority; otherwise the app estimates each photo’s time zone offline from GPS and a city within 25 km, using daylight-saving rules at the capture date. Set **Fallback time zone for this batch** once for files without a usable GPS zone, then preview again. The fallback is never silently taken from your Mac. GPS city zones are approximate near borders; File details shows the chosen interpretation and warnings. The header displays the app version. Existing saved workflows retain their explicit settings.
+Metadata-only undo requires the processed files to remain unchanged. [Help and installation](docs/INSTALL.md).
 
-Frozen plans retain selected settings, identities, date provenance, names and dependencies. The app streams full-file hashing, verifies stored image/video payloads, rejects conflicting edits and retains partial reports and recovery evidence. Full-file checks can take time on large media or slower drives. Workflows, Services and native droplets import files for review before Apply. Finder attributes, scoped system Trash and Finder visibility are available as separate actions.
+## Screenshots
 
-Generated integration fixtures cover JPEG, baseline HEIC, TIFF, PNG, WebP, AVIF, MOV and MP4. Post-signing checks on a genuine Nikon COOLPIX P6000 NRW sample verified capture/GPS date restoration, offline place lookup, batch numbering, in-place renaming and undo while preserving the RAW bytes and file attributes. Repeated read-only HEVC configuration fields in baseline HEIC/HEIF are accepted while complete occurrence counts, values and media payloads remain verified. Conflicting editable fields, helper errors and unqualified HDR/auxiliary layouts still block writing. Embedded-write support is qualified by operation and layout; this NRW test does not qualify embedded RAW metadata writing. Genuine HDR/depth/auxiliary HEIF, Live Photos, additional RAW families and video formats, large real video and filesystem/host matrices still need acceptance evidence. See [known limits](docs/KNOWN-LIMITS.md).
+![Date and location previews](docs/images/independent-previews.jpg)
 
-The app bundles ExifTool 13.59, Perl 5.44.0 and an offline GeoNames-derived database. It makes no outbound network requests and requires no separate Perl/Homebrew installation. Reports stay local and omit coordinates by default. Dependency source hashes/licenses are recorded in `Dependencies/` and `ThirdParty/`.
+![Optional thumbnails](docs/images/optional-thumbnails.jpg)
 
-## Build and test
-
-Use Xcode with Swift 5.9 or newer, Python 3.12+, the system C compiler and make. Build scripts download official pinned dependency archives, verify their SHA-256 values and retain build receipts. Existing candidate outputs are never overwritten.
-
-```sh
-Scripts/build-app.sh --arch arm64 --configuration debug --output work/test-bundles/FRESH_ARM64
-Scripts/test.sh
-Scripts/build-app.sh --arch x86_64 --configuration release --output work/test-bundles/FRESH_INTEL
-python3 -m unittest discover -s Tests/ReleaseGateTests -v
-```
-
-Choose a matching fixture bundle with `RESTOREGPSTIME_TEST_APP` for Core tests and `RESTOREGPSTIME_TEST_APP_BUNDLE` for app backend tests. Intel tests must execute under a matching process; SwiftPM discovery from an ARM process is not native Intel proof. Rosetta is labeled separately. Generated test files belong only in disposable local workspaces. The system Trash test is opt-in.
-
-The developer-only `RestoreGPSTimeQA` executable records actual host identity, bundled runtime/dependency hashes and fixture identities. `Scripts/qualify.sh --app PATH --fixture-manifest PATH --evidence-dir FRESH_PATH --host-label LABEL` writes explicit pass/fail/missing gates and returns nonzero for incomplete acceptance. It is not included in the user app. The manual self-hosted workflow performs no artifact/private-media upload.
-
-## Acceptance and release
-
-[Installation](docs/INSTALL.md), [recovery](docs/RECOVERY.md), [release procedure](docs/RELEASE.md), [evidence contract](docs/acceptance/EVIDENCE.md), [format matrix](docs/acceptance/format-matrix.json), [host matrix](docs/acceptance/host-matrix.json), [31 reference actions](docs/acceptance/reference-actions.csv), and [Finder Tools](docs/acceptance/reference-tools.csv).
-
-The self-signed 0.1.0 preview tags both point to source commit `927cbd0a2f80cae5ae564ed79ea07757fc251c0f`. Release assets retain that build identity; subsequent documentation changes do not change their binaries. Their code signatures use the locally generated RestoreGPSTime Self-Signed (Delitants) certificate, not an Apple- or GitHub-issued identity.
-
-Future notarized stable publication to `Delitants/restoregpstime-macos` requires both architecture sets at one reviewed source SHA, native ARM/Intel and macOS 13 acceptance, genuine-format/volume evidence, native UI/OS integration, the Instruments responsiveness trace, relocated/offline/quarantine checks, public-content audit, Developer ID signing and notarization. The stable-release checker and publisher enforce those gates. Self-signed preview publication is documented separately in the release procedure.
-
-[Approved specification](docs/superpowers/specs/2026-10-21-restoregpstime-design.md), [implementation plan](docs/superpowers/plans/2026-10-21-restoregpstime-implementation.md), and [reference behavior](docs/REFERENCE.md). Original code uses the MIT license; dependencies retain their separate licenses. No reference-app binary/artwork or personal media is distributed.
+[MIT license](LICENSE)

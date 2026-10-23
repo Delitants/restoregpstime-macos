@@ -7,3 +7,5 @@ outputs/releases/
 Tests/PrivateFixtures/
 __pycache__/
 *.pyc
+
+/docs/superpowers/
