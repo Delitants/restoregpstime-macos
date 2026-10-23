@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "repository": "Delitants/restoregpstime-macos",
+  "baseline": "a27095a8918b3a64576cf40b3d2e76fee9734707",
+  "public_docs": [],
+  "public_data": [],
+  "release_assets": [
+    "RestoreGPSTime-*-AppleSilicon-SelfSigned.zip",
+    "RestoreGPSTime-*-Intel-SelfSigned.zip",
+    "INSTALL.txt",
+    "LICENSE.txt",
+    "RestoreGPSTime-SelfSigned.cer",
+    "SHA256SUMS.txt",
+    "THIRD-PARTY-NOTICES.txt"
+  ]
+}

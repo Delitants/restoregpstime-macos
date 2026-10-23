@@ -41,6 +41,7 @@ def source_path_error(name):
     error=internal_path_error(name)
     if error:return error
     path=pathlib.PurePosixPath(name)
+    if name in {'.github/publication/guard.py','.github/publication/install-hooks.py','.github/publication/policy.json'}:return None
     if name in PUBLIC_DOCS or name in ROOT_FILES or name in DATA_FILES or name in UPSTREAM_FILES:return None
     if path.suffix.casefold() in SOURCE_EXTENSIONS.get(path.parts[0],set()):return None
     if path.parts[:2]==('Tests','Fixtures') and path.suffix.casefold() in MEDIA_TYPES:return None

@@ -25,3 +25,9 @@ __pycache__/
 /docs/internal/
 /docs/plans/
 /docs/reports/
+
+# Local publication material
+/work/
+/outputs/
+/CLAUDE.md
+/GEMINI.md
