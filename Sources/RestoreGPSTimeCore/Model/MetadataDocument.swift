@@ -39,6 +39,22 @@ public struct MetadataDocument:Codable,Equatable,Sendable {
         guard repeated.isEmpty else {throw RestoreError(.unsupported,"Repeated metadata fields require separate write qualification: "+repeated.prefix(8).joined(separator:", ")+". File dates, copies and explicit sidecars remain available when their selected sources are unambiguous.")}
     }
     func qualifiedRepeatedField(_ id:String)->Bool {
+        if profile.family == .photo,["HEIC","HEIF"].contains(profile.identifier),[
+            "QuickTime:HEVCConfigurationVersion","QuickTime:GeneralProfileSpace",
+            "QuickTime:GeneralTierFlag","QuickTime:GeneralProfileIDC",
+            "QuickTime:GenProfileCompatibilityFlags","QuickTime:ConstraintIndicatorFlags",
+            "QuickTime:GeneralLevelIDC","QuickTime:MinSpatialSegmentationIDC",
+            "QuickTime:ParallelismType","QuickTime:ChromaFormat","QuickTime:BitDepthLuma",
+            "QuickTime:BitDepthChroma","QuickTime:AverageFrameRate","QuickTime:ConstantFrameRate",
+            "QuickTime:NumTemporalLayers","QuickTime:TemporalIDNested"
+        ].contains(id) {
+            // Exact read-only hvcC observations from ExifTool's HEVCConfig table.
+            // Different image items may have different codec values. The complete
+            // occurrence multiset still must survive verifyDiff, and heif-items-v1
+            // protects every codec property, media extent and item association.
+            // This does not qualify HDR/auxiliary layouts or editable metadata.
+            return true
+        }
         if profile.family == .video {
             if id=="QuickTime:HandlerType" {return !values(for:id).isEmpty && values(for:id).allSatisfy {["mdir","mdta"].contains($0.text)}}
             // MOV has distinct media/data handlers within one track. Their complete
