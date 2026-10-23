@@ -214,4 +214,79 @@ final class CompactBackupTests:TransactionTestCase {
         }
     }
 
+    private func lockedParentFixture(_ prefix:String,locked:Bool=true) async throws -> (URL,InspectedItem,InspectedItem,BatchPlan,AttributeMutationDriver) {
+        let child=try item("\(prefix)/child.HEIC"),sibling=try item("\(prefix)/sibling.HEIC"),folder=child.snapshot.url.deletingLastPathComponent()
+        let directory=InspectedItem(snapshot:try FileIdentityReader().snapshot(at:folder),metadata:.init(tags:[:]))
+        var request=OperationRequest();if locked {request.finder=[.locked(true)]}
+        var dates=DatePolicy();dates.source = .specific(try utc("2020-02-03T04:05:06Z"));dates.targets = .modification;request.dates=dates
+        var settings=try options(mode:.modifyInPlace);settings.recoveryRoot=recoveryRoot;settings.importRoots=[folder];settings.backupMode = .metadata
+        let plan=try await planner().preview(items:[directory,child,sibling],request:request,options:settings),expected=self.identity
+        let driver=AttributeMutationDriver(paths:RuntimePaths(appBundle:testApp)),executor=BatchExecutor(driver:driver,validator:.init(dependencies:{expected}))
+        var result:BatchReport?
+        for await event in executor.execute(plan) {if case .finished(let report)=event {result=report}}
+        XCTAssertTrue(try XCTUnwrap(result).success,"\(result!.results)")
+        return (folder,child,sibling,plan,driver)
+    }
+    func testSelectedChildUndoCoordinatesUnselectedLockedParentOnly() async throws {
+        let (folder,child,sibling,plan,driver)=try await lockedParentFixture("selected-child")
+        defer {_ = chflags(folder.path,0);_ = chflags(child.snapshot.url.path,0);_ = chflags(sibling.snapshot.url.path,0)}
+        let parentAfter=try FileIdentityReader().snapshot(at:folder),siblingAfter=try FileIdentityReader().fingerprint(at:sibling.snapshot.url)
+        let outcome=try await RecoveryCoordinator(root:recoveryRoot,driver:driver).restore(batchID:plan.id,choice:.originalLocations,selectedSourceKeys:[child.snapshot.id.physicalKey])
+        XCTAssertTrue(outcome.isComplete,"\(outcome.conflicts)");XCTAssertEqual(outcome.restored.count,1)
+        XCTAssertTrue(SecureFS.attributesEqual(try FileIdentityReader().snapshot(at:folder),parentAfter))
+        XCTAssertEqual(try FileIdentityReader().fingerprint(at:sibling.snapshot.url),siblingAfter)
+        XCTAssertTrue(SecureFS.attributesEqual(try FileIdentityReader().snapshot(at:child.snapshot.url),child.snapshot))
+        let parentRecord=try XCTUnwrap(RecoveryJournal(root:recoveryRoot,batchID:plan.id).records().first {$0.members.first?.item.source.snapshot.kind == .directory})
+        XCTAssertFalse(parentRecord.members[0].restored)
+    }
+    func testSelectedChildConflictRelocksUnselectedAncestor() async throws {
+        let (folder,child,sibling,plan,driver)=try await lockedParentFixture("selected-conflict")
+        defer {_ = chflags(folder.path,0);_ = chflags(child.snapshot.url.path,0);_ = chflags(sibling.snapshot.url.path,0)}
+        let parentAfter=try FileIdentityReader().snapshot(at:folder)
+        XCTAssertEqual(chflags(child.snapshot.url.path,0),0)
+        let changed=try FileIdentityReader().fingerprint(at:child.snapshot.url)
+        let outcome=try await RecoveryCoordinator(root:recoveryRoot,driver:driver).restore(batchID:plan.id,choice:.originalLocations,selectedSourceKeys:[child.snapshot.id.physicalKey])
+        XCTAssertFalse(outcome.isComplete)
+        XCTAssertTrue(SecureFS.attributesEqual(try FileIdentityReader().snapshot(at:folder),parentAfter))
+        XCTAssertEqual(try FileIdentityReader().fingerprint(at:child.snapshot.url),changed)
+    }
+
+    func testSelectedChildKeepsUnselectedUnlockedParentRecoverable() async throws {
+        let (folder,child,_,plan,driver)=try await lockedParentFixture("selected-unlocked",locked:false)
+        let parentAfter=try FileIdentityReader().snapshot(at:folder)
+        let coordinator=RecoveryCoordinator(root:recoveryRoot,driver:driver)
+        let childUndo=try await coordinator.restore(batchID:plan.id,choice:.originalLocations,selectedSourceKeys:[child.snapshot.id.physicalKey])
+        XCTAssertTrue(childUndo.isComplete,"\(childUndo.conflicts)")
+        XCTAssertTrue(SecureFS.attributesEqual(try FileIdentityReader().snapshot(at:folder),parentAfter))
+        let parent=try XCTUnwrap(plan.groups.flatMap(\.items).first {$0.source.snapshot.kind == .directory})
+        let parentUndo=try await coordinator.restore(batchID:plan.id,choice:.originalLocations,selectedSourceKeys:[parent.name.sourceKey])
+        XCTAssertTrue(parentUndo.isComplete,"\(parentUndo.conflicts)")
+    }
+    func testSelectedChildResumesPersistedAncestorUnlockIntent() async throws {
+        let (folder,child,sibling,plan,driver)=try await lockedParentFixture("selected-resume")
+        defer {_ = chflags(folder.path,0);_ = chflags(child.snapshot.url.path,0);_ = chflags(sibling.snapshot.url.path,0)}
+        let journal=try RecoveryJournal(root:recoveryRoot,batchID:plan.id)
+        var record=try XCTUnwrap(journal.records().first {$0.members.first?.item.source.snapshot.kind == .directory})
+        let before=try FileIdentityReader().fingerprint(at:folder)
+        record.members[0].directoryCoordination=before;try journal.persist(record)
+        XCTAssertEqual(chflags(folder.path,before.snapshot.flags & ~UInt32(UF_IMMUTABLE)),0)
+        let outcome=try await RecoveryCoordinator(root:recoveryRoot,driver:driver).restore(batchID:plan.id,choice:.originalLocations,selectedSourceKeys:[child.snapshot.id.physicalKey])
+        XCTAssertTrue(outcome.isComplete,"\(outcome.conflicts)")
+        XCTAssertTrue(SecureFS.attributesEqual(try FileIdentityReader().snapshot(at:folder),before.snapshot))
+        XCTAssertNil(try journal.record(groupID:record.groupID)?.members[0].directoryCoordination)
+    }
+    func testSelectedChildRacePreservesNewAncestorAttributesAndRelocks() async throws {
+        let (folder,child,sibling,plan,driver)=try await lockedParentFixture("selected-race")
+        defer {_ = chflags(folder.path,0);_ = chflags(child.snapshot.url.path,0);_ = chflags(sibling.snapshot.url.path,0)}
+        let value=Data("new external attribute".utf8),faults=TransactionFaults()
+        faults.callback={point in if case .afterMember=point {
+            guard value.withUnsafeBytes({setxattr(folder.path,"org.restoregpstime.concurrent",$0.baseAddress,value.count,0,0)})==0 else {throw SecureFS.error("Fixture concurrent ancestor attribute")}
+            throw RestoreError(.io,"Fixture conflict after output exchange")
+        }}
+        let outcome=try await RecoveryCoordinator(root:recoveryRoot,driver:driver,options:.init(checkpoint:faults.check)).restore(batchID:plan.id,choice:.originalLocations,selectedSourceKeys:[child.snapshot.id.physicalKey])
+        XCTAssertFalse(outcome.isComplete)
+        let parent=try FileIdentityReader().snapshot(at:folder)
+        XCTAssertTrue(parent.isLocked);XCTAssertNotNil(parent.xattrHashes["org.restoregpstime.concurrent"])
+    }
+
 }

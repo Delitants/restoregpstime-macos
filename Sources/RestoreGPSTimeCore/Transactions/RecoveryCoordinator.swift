@@ -13,6 +13,100 @@ public struct RecoveryCoordinator:Sendable {
         return try await worker.value
     }
     private func restoreBlocking(batchID:UUID,choice:RecoveryChoice,selectedSourceKeys:Set<String>?) async throws -> RecoveryOutcome {
+        guard case .originalLocations=choice else {return try await restoreSelectedBlocking(batchID:batchID,choice:choice,selectedSourceKeys:selectedSourceKeys)}
+        let journal=try RecoveryJournal(root:root,batchID:batchID)
+        let all=try journal.records(),selected=all.filter {record in
+            let chosen=selectedSourceKeys.map {keys in record.members.contains {keys.contains($0.item.name.sourceKey)}} ?? true
+            return chosen && !(record.options.effectiveBackupMode == .none && (record.phase == .committed || record.compactCleanup != nil))
+        }
+        guard !selected.isEmpty else {return try await restoreSelectedBlocking(batchID:batchID,choice:choice,selectedSourceKeys:selectedSourceKeys)}
+        let selectedIDs=Set(selected.map(\.groupID))
+        var dependencies=[(UUID,Int,URL)]()
+        for record in all {
+            for index in record.members.indices where record.members[index].item.source.snapshot.kind == .directory {
+                let member=record.members[index],roots=[member.item.name.finalURL,member.item.source.snapshot.url]
+                let ancestor=selected.contains {chosen in chosen.members.contains {child in
+                    [child.item.name.finalURL,child.item.source.snapshot.url].contains {path in roots.contains {root in path.path != root.path && BatchPlanner.isWithin(path,root)}}
+                }}
+                if (!selectedIDs.contains(record.groupID) && ancestor) || (member.directoryCoordination != nil && (ancestor || selectedIDs.contains(record.groupID))) {
+                    dependencies.append((record.groupID,index,try Committer.target(member.item)))
+                }
+            }
+        }
+        dependencies.sort {$0.2.path.count<$1.2.path.count}
+        var active=[(UUID,Int)](),coordinationConflicts=[String]()
+        do {
+            // Finish persisted unlock intents from a previous interrupted restore
+            // before validating a fresh selected recovery against the journal.
+            for (group,index,_) in dependencies {
+                if try journal.record(groupID:group)?.members[index].directoryCoordination != nil {
+                    try finishDirectoryCoordination(group:group,index:index,journal:journal,allowDateChanges:false)
+                }
+            }
+            for (group,index,target) in dependencies where !selectedIDs.contains(group) {
+                guard var record=try journal.record(groupID:group) else {throw RestoreError(.conflict,"Ancestor recovery record disappeared.")}
+                let member=record.members[index]
+                _ = try state(member,record:record)
+                let before=try FileIdentityReader().fingerprint(at:target)
+                record.members[index].directoryCoordination=before
+                try journal.persist(record);active.append((group,index))
+                try coordinated(target) {
+                    guard try FileIdentityReader().fingerprint(at:target)==before else {throw RestoreError(.conflict,"A locked ancestor changed before coordinated undo.")}
+                    if before.snapshot.isLocked {try SecureFS.flags(target,before.snapshot.flags & ~UInt32(UF_IMMUTABLE))}
+                }
+            }
+            let outcome=try await restoreSelectedBlocking(batchID:batchID,choice:choice,selectedSourceKeys:selectedSourceKeys)
+            for (group,index) in active.reversed() {
+                do {try finishDirectoryCoordination(group:group,index:index,journal:journal,allowDateChanges:outcome.isComplete)}
+                catch {coordinationConflicts.append(error.localizedDescription)}
+            }
+            return .init(batchID:batchID,restored:outcome.restored,conflicts:outcome.conflicts+coordinationConflicts)
+        } catch {
+            let failure=error.localizedDescription
+            // A child conflict or journal/coordinator error must not leave the
+            // verified same ancestor inode unlocked. Replacement folders are untouched.
+            for (group,index) in active.reversed() {
+                do {try finishDirectoryCoordination(group:group,index:index,journal:journal,allowDateChanges:false)}
+                catch {coordinationConflicts.append(error.localizedDescription)}
+            }
+            return .init(batchID:batchID,restored:[],conflicts:[failure]+coordinationConflicts)
+        }
+    }
+    private func finishDirectoryCoordination(group:UUID,index:Int,journal:RecoveryJournal,allowDateChanges:Bool) throws {
+        guard var record=try journal.record(groupID:group),let before=record.members[index].directoryCoordination else {return}
+        let target=try SecureFS.canonical(before.snapshot.url),reader=FileIdentityReader()
+        var changedAttributes=false
+        try coordinated(target) {
+            let current=try reader.fingerprint(at:target),saved=before.snapshot
+            guard current.snapshot.kind == .directory,current.snapshot.id.physicalKey==saved.id.physicalKey,FileTimestamp.matches(current.snapshot.creationTimestamp,saved.creationTimestamp,date:current.snapshot.creationDate,expectedDate:saved.creationDate) else {
+                throw RestoreError(.conflict,"An ancestor folder was replaced during undo; its replacement was left untouched.")
+            }
+            let unlocked=saved.flags & ~UInt32(UF_IMMUTABLE)
+            let stable=SecureFS.stableDirectoryAttributes(current.snapshot,saved,flags:unlocked) || SecureFS.stableDirectoryAttributes(current.snapshot,saved,flags:saved.flags)
+            changedAttributes = !stable || (!allowDateChanges && !SecureFS.datesEqual(current.snapshot,saved))
+            if !changedAttributes && !SecureFS.datesEqual(current.snapshot,saved) {
+                if current.snapshot.isLocked {changedAttributes=true}
+                else {
+                    let fd=open(target.path,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);guard fd>=0 else {throw SecureFS.error("Open coordinated ancestor dates")};defer {close(fd)}
+                    try SecureFS.dates(saved,fd:fd)
+                }
+            }
+            // Restore only the immutable bit if another attribute changed; do not
+            // overwrite that newer attribute while unwinding our temporary unlock.
+            let flags=changedAttributes ? current.snapshot.flags | (saved.flags & UInt32(UF_IMMUTABLE)):saved.flags
+            if (try reader.snapshot(at:target).flags) != flags {try SecureFS.flags(target,flags)}
+            let after=try reader.fingerprint(at:target)
+            if !changedAttributes {
+                guard SecureFS.attributesEqual(after.snapshot,saved) else {throw RestoreError(.verificationFailed,"The ancestor's committed attributes did not survive selected undo.")}
+                if record.members[index].restored {record.members[index].restoreFingerprint=after}
+                else {record.members[index].after=after}
+            }
+            record.members[index].directoryCoordination=nil
+        }
+        try journal.persist(record)
+        if changedAttributes {throw RestoreError(.conflict,"An ancestor's attributes changed during undo; its final lock was restored and newer attributes were retained.")}
+    }
+    private func restoreSelectedBlocking(batchID:UUID,choice:RecoveryChoice,selectedSourceKeys:Set<String>?) async throws -> RecoveryOutcome {
         let journal=try RecoveryJournal(root:root,batchID:batchID)
         var restored=[URL](),conflicts=[String]()
         var ownRestoredPaths=[URL]()

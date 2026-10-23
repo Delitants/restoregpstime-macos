@@ -4,6 +4,8 @@ public enum RecoveryPhase:String,Codable,CaseIterable,Sendable {case prepared,ba
 public enum CommitStep:String,Codable,Sendable {case pending,unlockPending,unlocked,swapPending,swapped,publishPending,published,retirePending,retired,flagsPending,complete,directoryPending}
 public struct RecoveryMember:Codable,Equatable,Sendable {
     public let item:PlannedItem
+    /// A verified ancestor coordinated for another selected group's undo.
+    public var directoryCoordination:SourceFingerprint?
     public var compactHash:String?
     public var backupURL:URL?
     public var backupHash:String?
