@@ -1,6 +1,8 @@
 # Install RestoreGPSTime
 
-RestoreGPSTime targets macOS 13 and newer. Choose **AppleSilicon** for an Apple Silicon Mac or **Intel** for an Intel Mac. Each download contains only its named architecture. Native macOS 13/Intel qualification and notarization are still pending for the unreleased development candidates.
+RestoreGPSTime targets macOS 13 and newer. Choose **AppleSilicon** for an Apple Silicon Mac or **Intel** for an Intel Mac. Each download contains only its named architecture. The two 0.1.0 downloads are self-signed previews: Apple Silicon was tested natively and Intel through Rosetta on Apple Silicon. Physical Intel/macOS 13 qualification and Apple notarization remain pending.
+
+For these preview releases, verify the download against the attached `SHA256SUMS.txt`, expand the ZIP and move RestoreGPSTime.app into Applications. The public `.cer` file documents the self-signed identity and contains no private key. It is not an Apple-issued certificate. macOS may block the downloaded app or show an unidentified-developer warning; these previews do not establish Apple Gatekeeper trust.
 
 For a completed stable release, verify the archive against `SHA256SUMS.txt`, open the DMG and drag RestoreGPSTime into Applications, or expand the ZIP and move the app there. Open it normally. Stable downloads must pass Gatekeeper with Developer ID signing and notarization. Do not disable Gatekeeper to install a development candidate.
 

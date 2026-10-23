@@ -1,5 +1,15 @@
 # Release procedure
 
+## Self-signed 0.1.0 previews
+
+The user authorized public self-signed previews as two separate GitHub releases. They use tags `v0.1.0-selfsigned-arm64` and `v0.1.0-selfsigned-x86_64`, both pointing to `927cbd0a2f80cae5ae564ed79ea07757fc251c0f`. Each tag matches the embedded source identity of its packaged app. Documentation can advance on the default branch independently.
+
+Each release contains one architecture's ZIP, `SHA256SUMS.txt`, `RELEASE-INFO.json`, the public signing certificate, installation notes and license notices. Private keys, Keychains, private media, local paths and raw host-security receipts are excluded. The release pages state that the builds are self-signed and unnotarized, and label Intel execution as Rosetta testing. They do not claim physical Intel or macOS 13 qualification.
+
+Before publication, verify the exact ZIP hashes, CRCs, source/tag identity and upload inventory. Keep releases as drafts while uploading, download every asset and compare its SHA-256, then publish each as a prerelease. Read back public release status, tags and assets. Never overwrite existing tags or conflicting assets. The existing `publish-release.sh` remains the notarized stable-release workflow described below.
+
+## Future notarized stable releases
+
 Both stable tags must point to one clean, reviewed source commit: `v1.0.0-arm64` and `v1.0.0-x86_64`. Release names are `RestoreGPSTime-1.0.0-AppleSilicon.{zip,dmg}` and `RestoreGPSTime-1.0.0-Intel.{zip,dmg}`. Candidate packaging alone is not acceptance.
 
 1. Run deterministic tests and the candidate-bound QA executable. Obtain native ARM64/Intel acceptance on macOS 13 and the current supported OS, genuine format/large-video and volume evidence, native UI and Finder/Services/droplets, isolated Finder preferences, an Instruments 10,000-item trace with no batch-induced main-thread stall over 250 ms, relocated offline and downloaded/quarantined Gatekeeper checks. Keep private media/raw paths local.
