@@ -6,14 +6,16 @@ enum SecureFS {
     static func error(_ operation:String)->RestoreError {.init(.io,"\(operation): \(String(cString:strerror(errno)))")}
     static func directory(_ url:URL,create:Bool=false,mode:mode_t=0o755) throws -> Int32 {
         guard url.isFileURL,url.path.hasPrefix("/"),!url.path.utf8.contains(0) else {throw RestoreError(.invalidInput,"Invalid local directory path.")}
-        var fd=open("/",O_RDONLY|O_DIRECTORY|O_CLOEXEC)
+        // Parent handles are used for relative lookup, not directory enumeration.
+        // Read opens can prompt for access to an ancestor outside the selected folder.
+        var fd=open("/",O_SEARCH|O_DIRECTORY|O_CLOEXEC)
         guard fd>=0 else {throw error("Open filesystem root")}
         do {
             for component in url.path.split(separator:"/") {
                 let part=String(component)
                 guard part != ".",part != ".." else {throw RestoreError(.invalidInput,"Directory traversal is not allowed.")}
                 if create && mkdirat(fd,part,mode) != 0 && errno != EEXIST {throw error("Create directory")}
-                let next=openat(fd,part,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC)
+                let next=openat(fd,part,O_SEARCH|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC)
                 guard next>=0 else {throw error("Open directory component \(part) without links (\(url.path))")}
                 close(fd);fd=next
             }
@@ -43,6 +45,23 @@ enum SecureFS {
         let result=values.withUnsafeMutableBytes {fsetattrlist(fd,&list,$0.baseAddress,$0.count,0)}
         guard result==0 else {throw error("Preserve filesystem dates")}
     }
+    static func copyExtendedAttributes(from input:Int32,to output:Int32,includeACL:Bool=false) throws {
+        // fcopyfile interprets quarantine and can rewrite its timestamp/agent.
+        // Preserve the original opaque value, including every security flag.
+        let name="com.apple.quarantine",size=fgetxattr(input,"com.apple.quarantine",nil,0,0,0)
+        var quarantine:Data?
+        if size>=0 {
+            guard size<=16_777_216 else {throw RestoreError(.unsupported,"Quarantine attribute exceeds the bounded snapshot size.")}
+            var data=Data(count:size)
+            guard data.withUnsafeMutableBytes({fgetxattr(input,name,$0.baseAddress,size,0,0)})==size else {throw RestoreError(.conflict,"Quarantine changed while reading it.")}
+            quarantine=data
+        } else if errno != ENOATTR && errno != ENOTSUP {throw error("Read original quarantine attribute")}
+        let flags=copyfile_flags_t(COPYFILE_XATTR | (includeACL ? COPYFILE_ACL:0))
+        guard fcopyfile(input,output,nil,flags)==0 else {throw error("Preserve extended attributes")}
+        if let quarantine {
+            guard quarantine.withUnsafeBytes({fsetxattr(output,name,$0.baseAddress,quarantine.count,0,0)})==0 else {throw error("Preserve exact quarantine attribute")}
+        }
+    }
     static func copy(_ expected:SourceFingerprint,from source:URL,to destination:URL,vault:Bool=false) throws -> SourceFingerprint {
         let sourceParent=try directory(source.deletingLastPathComponent()),targetParent=try directory(destination.deletingLastPathComponent());defer {close(sourceParent);close(targetParent)}
         let isDirectory=expected.snapshot.kind == .directory
@@ -68,7 +87,7 @@ enum SecureFS {
             }
         }
         guard fchown(output,expected.snapshot.ownerID,expected.snapshot.groupID)==0 else {throw error("Preserve ownership")}
-        guard fcopyfile(input,output,nil,copyfile_flags_t(COPYFILE_XATTR|COPYFILE_ACL))==0 else {throw error("Preserve extended attributes and ACL")}
+        try copyExtendedAttributes(from:input,to:output,includeACL:true)
         guard fchmod(output,mode_t(expected.snapshot.permissions))==0 else {throw error("Preserve permissions")}
         try dates(expected.snapshot,fd:output)
         guard fchflags(output,expected.snapshot.flags & ~UInt32(UF_IMMUTABLE))==0,fsync(output)==0 else {throw error("Sync copied attributes")}
@@ -116,7 +135,8 @@ extension SecureFS {
         let current=try FileIdentityReader().snapshot(at:target)
         if current.isLocked {guard fchflags(output,current.flags & ~UInt32(UF_IMMUTABLE))==0 else {throw error("Unlock owned restoration target")}}
         for name in current.xattrHashes.keys where snapshot.xattrHashes[name]==nil {guard fremovexattr(output,name,0)==0 else {throw error("Restore exact attribute inventory")}}
-        guard fcopyfile(input,output,nil,copyfile_flags_t(COPYFILE_XATTR))==0,fchown(output,snapshot.ownerID,snapshot.groupID)==0 else {throw error("Restore extended attributes and ownership")}
+        try copyExtendedAttributes(from:input,to:output)
+        guard fchown(output,snapshot.ownerID,snapshot.groupID)==0 else {throw error("Restore ownership")}
         if let text=snapshot.aclText {
             guard let acl=acl_from_text(text) else {throw error("Read saved ACL")};defer {acl_free(UnsafeMutableRawPointer(acl))}
             guard acl_set_fd(output,acl)==0 else {throw error("Restore ACL")}
