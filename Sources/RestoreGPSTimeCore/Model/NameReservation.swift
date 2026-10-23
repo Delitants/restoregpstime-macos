@@ -8,9 +8,11 @@ public struct NameReservation:Codable,Equatable,Sendable {
     public let blockingReason:String?
 }
 public struct DestinationContext:Sendable {
+    public static let previewRoot=URL(fileURLWithPath:"/__RestoreGPSTimePreview__/Copies",isDirectory:true)
+    public let provisional:Bool
     public let root:URL?
     public let saveCopies:Bool
     public let importRoots:[URL]
     public let rules:VolumeNamingRules
-    public init(root:URL?=nil,saveCopies:Bool,importRoots:[URL]=[],rules:VolumeNamingRules=VolumeNamingRules()) { self.root=root;self.saveCopies=saveCopies;self.importRoots=importRoots;self.rules=rules }
+    public init(root:URL?=nil,saveCopies:Bool,importRoots:[URL]=[],rules:VolumeNamingRules=VolumeNamingRules(),provisional:Bool=false) { self.provisional=provisional;self.root=provisional ? Self.previewRoot:root;self.saveCopies=saveCopies;self.importRoots=importRoots;self.rules=rules }
 }

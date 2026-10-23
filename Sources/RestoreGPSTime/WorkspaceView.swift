@@ -5,6 +5,7 @@ import RestoreGPSTimeCore
 struct WorkspaceView:View {
     @ObservedObject var session:AppSession
     @ObservedObject var model:AppModel
+    @AppStorage("workspaceSection") private var savedSection=WorkspaceSection.dates.rawValue
     @State private var section:WorkspaceSection? = .dates
     @State private var selection:String?
     @State private var inspectorVisible=false
@@ -40,6 +41,8 @@ struct WorkspaceView:View {
             Divider()
             footer
         }
+        .onAppear {section=WorkspaceSection(rawValue:savedSection) ?? .dates;model.activePreviewComponent=section?.previewComponent ?? .dates}
+        .onChange(of:section) {value in if let value {savedSection=value.rawValue;if let component=value.previewComponent {model.activePreviewComponent=component}}}
         .onDrop(of:[UTType.fileURL],isTargeted:$dropTarget) {providers in
             guard !model.isBusy else {return false}
             Task {
@@ -146,6 +149,9 @@ struct WorkspaceView:View {
             if let preparation=model.preparationProgress,let total=preparation.total,total>0 {
                 ProgressView(value:Double(preparation.completed),total:Double(total)).progressViewStyle(.linear).accessibilityLabel(preparation.message)
             }
+            if !utility {
+                Text(model.selectedChangeSummary).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            }
             if !model.blockedReasons.isEmpty {
                 Button("Review blocked reasons") {blockedReasonsVisible=true}.fixedSize()
             }
@@ -155,8 +161,12 @@ struct WorkspaceView:View {
                 Text(model.progress.isEmpty ? "Add files, choose settings, then preview.":model.progress).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
                 if model.isBusy {Button("Cancel") {model.cancel()}.fixedSize().disabled(model.phase == .recovering || model.phase == .cancelling)}
                 if !utility {
-                    Button("Preview changes") {Task {await model.preview()}}.fixedSize().disabled(model.rows.isEmpty || model.isBusy).keyboardShortcut("p",modifiers:[.command,.shift])
-                    Button(model.options.mode == .saveCopies ? "Save copies":"Change originals") {Task {await model.applyPreview()}}.fixedSize().disabled(!model.canApply).buttonStyle(.borderedProminent)
+                    Button("Preview changes") {Task {await model.preview(component:section?.previewComponent ?? .dates)}}.fixedSize().disabled(model.rows.isEmpty || model.isBusy).keyboardShortcut("p",modifiers:[.command,.shift])
+                    Button("Apply Changes") {Task {
+                        if model.outputDestinationPending {
+                            if let folder=await Panels.folder(title:"Save copies to",create:true) {await model.applyPreview(outputFolder:folder)}
+                        } else {await model.applyPreview()}
+                    }}.fixedSize().disabled(!model.canApply).buttonStyle(.borderedProminent)
                 }
             }
         }.padding(12)

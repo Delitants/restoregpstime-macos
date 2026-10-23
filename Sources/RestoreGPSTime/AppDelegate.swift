@@ -8,6 +8,7 @@ import AppKit
         let imports=pending;pending=[]
         for urls in imports {_ = await session.openURLs(urls)}
     }
+    func applicationWillTerminate(_ notification:Notification) {session?.persistPreferences()}
     func application(_ application:NSApplication,open urls:[URL]) {
         if let session {Task {_ = await session.openURLs(urls)}} else {pending.append(urls)}
     }

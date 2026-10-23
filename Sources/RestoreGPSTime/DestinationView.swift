@@ -2,6 +2,13 @@ import SwiftUI
 import RestoreGPSTimeCore
 struct DestinationView:View {
     @ObservedObject var model:AppModel
+    private var backupDescription:String {
+        switch model.options.effectiveBackupMode {
+        case .metadata:return "A compact metadata database lets you undo each file. Keep the processed media: missing or damaged media needs a full backup."
+        case .full:return "Entire original files are retained for undo, using more disk space."
+        case .none:return "No retained backup or undo after successful changes."
+        }
+    }
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             HStack(spacing:16) {
@@ -13,15 +20,20 @@ struct DestinationView:View {
                 Spacer(minLength:0)
             }
             if model.options.mode == .saveCopies {
-                FolderChoice(title:"Save copies to",url:$model.options.outputRoot)
+                if model.options.outputRoot != nil {FolderChoice(title:"Save copies to",url:$model.options.outputRoot)}
+                else {Text("Choose the output folder when you click Apply Changes. Preview works without one.").font(.callout).foregroundStyle(.secondary)}
                 Text("Your original files stay unchanged.").font(.caption).foregroundStyle(.secondary)
             } else {
-                Label("Originals are backed up before they change.",systemImage:"arrow.uturn.backward").font(.callout)
-                Text("Use Backups & undo to restore a batch. Backups are kept on this Mac until you remove them.").font(.caption).foregroundStyle(.secondary)
+                Picker("Backup",selection:Binding(get:{model.options.effectiveBackupMode},set:{model.options.backupMode=$0})) {
+                    Text("Metadata backup").tag(BackupMode.metadata)
+                    Text("Full backup").tag(BackupMode.full)
+                    Text("No backup").tag(BackupMode.none)
+                }
+                Text(backupDescription).font(.caption).foregroundStyle(model.options.effectiveBackupMode == .none ? .orange:.secondary).fixedSize(horizontal:false,vertical:true)
                 DisclosureGroup("Advanced backup settings") {
                     VStack(alignment:.leading,spacing:8) {
-                        FolderChoice(title:"Originals backup",url:$model.options.recoveryRoot)
-                        Text("This stores retained originals and undo records. It is separate from the destination for saved copies.").font(.caption).foregroundStyle(.secondary)
+                        FolderChoice(title:"Backup storage",url:$model.options.recoveryRoot)
+                        Text("Metadata backup stores a compact per-file database. Full backup retains complete originals. Temporary working space is needed while applying or undoing changes.").font(.caption).foregroundStyle(.secondary)
                     }.padding(.top,8)
                 }
             }

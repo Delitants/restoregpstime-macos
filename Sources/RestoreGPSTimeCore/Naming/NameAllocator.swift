@@ -27,6 +27,7 @@ public struct NameAllocator {
         }
         var existing=[String:[String:[URL]]](),reserved=Set<String>(),placeNext=[String:Int](),result=[NameReservation]()
         func occupied(_ target:URL,by item:InspectedItem) throws -> Bool {
+            if destinations.provisional {return false}
             let parent=target.deletingLastPathComponent().standardizedFileURL,key=rules.collisionKey(target.lastPathComponent)
             if existing[parent.path] == nil {
                 var map=[String:[URL]]();var status=stat()

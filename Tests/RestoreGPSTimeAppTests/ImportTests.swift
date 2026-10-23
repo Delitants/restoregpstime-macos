@@ -36,6 +36,7 @@ final class ImportTests:AppTestCase {
     @MainActor func testAppAndServicesOpenSameImports() async throws {
         let input=try item(),backend=FakeAppBackend(items:[input]),model=AppModel(backend:backend),importer=DocumentImporter(model:model)
         model.options.outputRoot=workspace.appendingPathComponent("Output")
+        try FileManager.default.createDirectory(at:model.options.outputRoot!,withIntermediateDirectories:true)
         let result=await importer.open(urls:[input.snapshot.url])
         XCTAssertTrue(result.errors.isEmpty);XCTAssertEqual(model.rows.count,1);XCTAssertNotNil(model.plan)
         let services=ServicesProvider(importer:importer)

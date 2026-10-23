@@ -10,12 +10,14 @@ import RestoreGPSTimeCore
     @Published var showScopedTrash=false
     @Published var scopedToolRunning=false
     @Published var toolResult:String?
-    @Published var appearanceChoice=0
+    @Published var appearanceChoice=0 {didSet {if appearanceChoice != oldValue {persistPreferences()}}}
     @Published var incompleteRecoveryCount=0
     @Published var recoveryNotice:String?
     var appearance:ColorScheme? {appearanceChoice==1 ? .light:(appearanceChoice==2 ? .dark:nil)}
     let supportRoot:URL
     let finder:FinderVisibilityController
+    private let preferences=AppPreferences()
+    private var preferencesEnabled=false
     private var starting=false,pendingImports=[[URL]]()
     private var openQueue=[QueuedImport]()
     private var drainingImports=false
@@ -33,6 +35,14 @@ import RestoreGPSTimeCore
             let identity=try await RuntimeProbe().inspect(paths:paths)
             let backend=LiveAppBackend(paths:paths),model=AppModel(backend:backend)
             model.options.recoveryRoot=supportRoot.appendingPathComponent("Recovery",isDirectory:true)
+            do {
+                if let saved=try preferences.load() {
+                    model.request=saved.request;model.options=saved.options;model.discovery=saved.discovery;appearanceChoice=saved.appearance
+                    if model.options.recoveryRoot==nil {model.options.recoveryRoot=supportRoot.appendingPathComponent("Recovery",isDirectory:true)}
+                }
+            } catch {model.presentError(RestoreError(.invalidInput,"Saved settings could not be loaded. Defaults are in use. "+error.localizedDescription))}
+            model.settingsDidChange={[weak self] in self?.persistPreferences()}
+            preferencesEnabled=true
             runtimeDescription="ExifTool \(identity.exifToolVersion) • Offline locations • \(identity.architecture)"
             self.model=model
             importer=DocumentImporter(model:model,automaticRecoveryRoot:supportRoot.appendingPathComponent("Recovery",isDirectory:true))
@@ -41,6 +51,11 @@ import RestoreGPSTimeCore
             let imports=pendingImports;pendingImports=[]
             for urls in imports {_ = await openURLs(urls)}
         } catch {runtimeIssue=error.localizedDescription}
+    }
+    func persistPreferences() {
+        guard preferencesEnabled,let model else {return}
+        do {try preferences.save(request:model.request,options:model.options,discovery:model.discovery,appearance:appearanceChoice)}
+        catch {model.presentError(RestoreError(.io,"Settings could not be saved: "+error.localizedDescription))}
     }
     func refreshRecovery() async {
         guard let root=model?.options.recoveryRoot else {incompleteRecoveryCount=0;return}

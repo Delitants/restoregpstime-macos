@@ -18,10 +18,10 @@ private struct PreparedImport:Sendable {let workflow:WorkflowDocument?,urls:[URL
             if prepared.replaceBatch {model.clear()}
             if let workflow=prepared.workflow {
                 model.request=workflow.request
-                var options=BatchOptions();options.importRoots=model.options.importRoots;options.recoveryRoot=automaticRecoveryRoot;model.options=options
+                var options=BatchOptions();options.backupMode = .metadata;options.importRoots=model.options.importRoots;options.recoveryRoot=automaticRecoveryRoot;model.options=options
             }
             if !prepared.urls.isEmpty {await model.importURLs(prepared.urls)}
-            if !model.rows.isEmpty {await model.preview()}
+            if !model.rows.isEmpty {await model.preview(component:model.activePreviewComponent)}
             return .init(errors:[])
         } catch {model.presentError(error);return .init(errors:[error.localizedDescription])}
     }

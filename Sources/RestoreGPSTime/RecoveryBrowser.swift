@@ -2,8 +2,14 @@ import Foundation
 import Darwin
 import RestoreGPSTimeCore
 
+struct RecoveryFile:Identifiable,Sendable {
+    let sourceKey:String,url:URL,groupID:UUID,backupMode:BackupMode,phase:RecoveryPhase,canUndo:Bool
+    var id:String {sourceKey}
+    var backupTitle:String {switch backupMode {case .metadata:return "Metadata backup";case .full:return "Full backup";case .none:return "No backup"}}
+}
 struct RecoveryBatch:Identifiable,Sendable {
     let batchID:UUID,createdAt:Date,groups:Int,incompleteGroups:Int,phases:[String]
+    let files:[RecoveryFile]
     var id:UUID {batchID}
 }
 // A read-only catalogue: browsing never creates recovery folders or replays a write.
@@ -23,7 +29,7 @@ actor RecoveryBrowser {
             let groups=openat(batch,"groups",O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC)
             guard groups>=0 else {throw failure("Open recovery records")};defer {close(groups)}
             try checkDirectory(groups)
-            var records=[RecoveryHeader]()
+            var records=[RecoveryRecord]()
             for file in try names(groups) where file.hasSuffix(".json") {
                 try Task.checkCancellation()
                 let handleFD=openat(groups,file,O_RDONLY|O_NOFOLLOW|O_CLOEXEC)
@@ -33,12 +39,21 @@ actor RecoveryBrowser {
                 guard fstat(handleFD,&state)==0,state.st_mode & S_IFMT==S_IFREG,state.st_uid==getuid(),state.st_mode & 0o077==0,state.st_nlink==1,state.st_size<=67_108_864 else {throw failure("Unsafe recovery record")}
                 let data=try handle.read(upToCount:67_108_865) ?? Data()
                 guard data.count<=67_108_864 else {throw failure("Oversized recovery record")}
-                let record=try JSONDecoder().decode(RecoveryHeader.self,from:data)
+                let record=try JSONDecoder().decode(RecoveryRecord.self,from:data)
                 guard record.schema==1,record.batchID==id,file==record.groupID.uuidString+".json" else {throw failure("Recovery record identity mismatch")}
                 records.append(record)
             }
             guard let first=records.min(by:{$0.createdAt<$1.createdAt}) else {continue}
-            batches.append(.init(batchID:id,createdAt:first.createdAt,groups:records.count,incompleteGroups:records.filter {$0.phase != .committed && $0.phase != .restored}.count,phases:Array(Set(records.map {$0.phase.rawValue})).sorted()))
+            var files=[RecoveryFile]()
+            for record in records {
+                var seen=Set<String>()
+                for member in record.members where seen.insert(member.item.source.snapshot.id.physicalKey).inserted {
+                    let mode=record.options.effectiveBackupMode
+                    let canUndo=record.phase != .restored && !(record.phase == .committed && mode == .none)
+                    files.append(.init(sourceKey:member.item.source.snapshot.id.physicalKey,url:member.item.source.snapshot.url,groupID:record.groupID,backupMode:mode,phase:record.phase,canUndo:canUndo))
+                }
+            }
+            batches.append(.init(batchID:id,createdAt:first.createdAt,groups:records.count,incompleteGroups:records.filter {$0.phase != .committed && $0.phase != .restored}.count,phases:Array(Set(records.map {$0.phase.rawValue})).sorted(),files:files.sorted {$0.url.path<$1.url.path}))
         }
         return batches.sorted {a,b in
             if (a.incompleteGroups>0) != (b.incompleteGroups>0) {return a.incompleteGroups>0}
@@ -62,5 +77,3 @@ actor RecoveryBrowser {
     }
     private func failure(_ text:String)->RestoreError {.init(.invalidInput,text+". Choose the private recovery folder created by RestoreGPSTime.")}
 }
-
-private struct RecoveryHeader:Decodable {let schema:Int,batchID:UUID,groupID:UUID,createdAt:Date,phase:RecoveryPhase}

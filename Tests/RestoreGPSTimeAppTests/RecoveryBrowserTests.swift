@@ -26,4 +26,19 @@ final class RecoveryBrowserTests:AppTestCase {
         do {_ = try await RecoveryBrowser().scan(root:root);XCTFail("Linked journal must be rejected") } catch {}
         XCTAssertTrue(FileManager.default.fileExists(atPath:retained.path))
     }
+    func testCatalogueExposesPerFileBackupModeAndCompletedNoBackupCannotUndo() async throws {
+        let input=try item(),root=workspace.appendingPathComponent("Recovery")
+        var options=BatchOptions();options.mode = .modifyInPlace;options.backupMode=BackupMode.none;options.recoveryRoot=root
+        var request=OperationRequest();request.dates=DatePolicy()
+        let plan=try await BatchPlanner(dependencies:.init(engineHash:"test",databaseHash:"test",capabilityHash:"test")).preview(items:[input],request:request,options:options)
+        let journal=try RecoveryJournal(root:root,batchID:plan.id),group=try XCTUnwrap(plan.groups.first)
+        var record=RecoveryRecord(batchID:plan.id,group:group,options:options);record.phase = .committed
+        try journal.persist(record)
+        let scanned=try await RecoveryBrowser().scan(root:root)
+        let batch=try XCTUnwrap(scanned.first)
+        XCTAssertEqual(batch.files.count,1);XCTAssertEqual(batch.files.first?.backupMode,BackupMode.none)
+        XCTAssertEqual(batch.files.first?.sourceKey,input.snapshot.id.physicalKey)
+        XCTAssertFalse(batch.files.first?.canUndo ?? true)
+    }
+
 }

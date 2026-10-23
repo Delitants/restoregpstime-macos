@@ -20,7 +20,7 @@ struct InspectorView:View {
                         detail("Current creation",displayDate(item.snapshot.creationDate));detail("Current modification",displayDate(item.snapshot.modificationDate))
                         if let plan=row.planned {
                             Divider();Text("Previewed changes").font(.headline)
-                            detail("Output",plan.name.finalURL.path)
+                            detail("Output",model.outputDestinationPending ? "Choose the output folder when applying copies.":plan.name.finalURL.path)
                             detail("Proposed creation",displayDate(plan.mutation.dates?.creationDate));detail("Proposed modification",displayDate(plan.mutation.dates?.modificationDate))
                             if let resolution=plan.resolution {detail("Date source",resolution.source);detail("Original date",resolution.original);detail("Interpretation",resolution.interpretation);ForEach(resolution.warnings,id:\.self) {Text($0).font(.caption).foregroundStyle(.orange)}}
                             if let group=model.plan?.groups.first(where:{$0.id==row.groupID}) {detail("Asset grouping",group.evidence)}

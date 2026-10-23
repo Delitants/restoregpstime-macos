@@ -22,6 +22,49 @@ final class LiveAppBackendTests:AppTestCase {
         XCTAssertTrue(metadata.contains {$0.completed>0 && $0.completed<65});XCTAssertTrue(metadata.allSatisfy {$0.total==65})
         XCTAssertEqual(try urls.map {try FileIdentityReader().fingerprint(at:$0)},before)
     }
+    @MainActor func testIndependentLivePreviewsDeferFolderThenApplyAndUndoCombinedChanges() async throws {
+        let url=workspace.appendingPathComponent("Input.jpg");try FileManager.default.copyItem(at:repo.appendingPathComponent("Tests/Fixtures/paris.jpg"),to:url)
+        let original=try FileIdentityReader().fingerprint(at:url),model=AppModel(backend:try backend())
+        model.options.recoveryRoot=workspace.appendingPathComponent("Recovery")
+        model.request.rename=NameTemplate();model.request.location=LocationWriteOptions()
+        await model.importURLs([url]);await model.preview(component:.places)
+        XCTAssertNil(model.issue);XCTAssertNil(model.rows.first?.planned?.mutation.dates)
+        let name=model.rows.first?.proposedName
+        XCTAssertTrue(name?.contains("Paris")==true);XCTAssertEqual(model.pendingPreviewComponents,[.dates]);XCTAssertFalse(model.canApply)
+        await model.preview(component:.dates)
+        XCTAssertNil(model.issue);XCTAssertTrue(model.canApply);XCTAssertTrue(model.outputDestinationPending)
+        XCTAssertEqual(model.rows.first?.proposedName,name)
+        XCTAssertNotNil(model.rows.first?.planned?.mutation.dates?.creationDate)
+        XCTAssertFalse(model.rows.first?.planned?.mutation.tags.isEmpty ?? true)
+        await model.applyPreview();XCTAssertNil(model.report);XCTAssertTrue(model.canApply)
+        let output=workspace.appendingPathComponent("Copies");try FileManager.default.createDirectory(at:output,withIntermediateDirectories:true)
+        await model.applyPreview(outputFolder:output)
+        let report=try XCTUnwrap(model.report);XCTAssertTrue(report.success,report.results.flatMap(\.errors).joined(separator:"\n"))
+        XCTAssertEqual(try FileIdentityReader().fingerprint(at:url),original)
+        let copied=try XCTUnwrap(report.results.flatMap(\.outputs).first);XCTAssertEqual(copied.lastPathComponent,name)
+        await model.restore(batchID:report.batchID,choice:.originalLocations,selectedSourceKeys:[original.snapshot.id.physicalKey])
+        XCTAssertNil(model.issue);XCTAssertFalse(FileManager.default.fileExists(atPath:copied.path));XCTAssertEqual(try FileIdentityReader().fingerprint(at:url),original)
+    }
+    @MainActor func testDisabledHistoricalCapturePreviewDoesNotBlockMetadataStrip() async throws {
+        let url=workspace.appendingPathComponent("Input.jpg");try FileManager.default.copyItem(at:repo.appendingPathComponent("Tests/Fixtures/paris.jpg"),to:url)
+        let model=AppModel(backend:try backend());model.options.mode = .modifyInPlace;model.options.recoveryRoot=workspace.appendingPathComponent("Recovery")
+        model.request.dates?.targets=[.capture]
+        await model.importURLs([url]);await model.preview(component:.dates)
+        XCTAssertTrue(model.canApply)
+        model.request.dates=nil;model.request.stripMetadata=true
+        await model.preview(component:.metadata)
+        XCTAssertNil(model.issue);XCTAssertTrue(model.canApply);XCTAssertTrue(model.pendingPreviewComponents.isEmpty)
+        XCTAssertNil(model.plan?.groups.first?.items.first?.mutation.dates);XCTAssertTrue(model.plan?.request.stripMetadata==true)
+    }
+    @MainActor func testLookupOnlyPlaceRetainedWhenDatePreviewRuns() async throws {
+        let url=workspace.appendingPathComponent("Input.jpg");try FileManager.default.copyItem(at:repo.appendingPathComponent("Tests/Fixtures/paris.jpg"),to:url)
+        let model=AppModel(backend:try backend());model.options.mode = .modifyInPlace
+        await model.importURLs([url]);await model.preview(component:.places)
+        let place=try XCTUnwrap(model.rows.first?.planned?.place)
+        await model.preview(component:.dates)
+        XCTAssertEqual(model.rows.first?.planned?.place,place)
+        XCTAssertTrue(model.canApply);XCTAssertTrue(model.plan?.request.rename.preserveOriginal==true);XCTAssertNil(model.plan?.request.location)
+    }
     private var repo:URL {URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()}
     private func backend() throws -> LiveAppBackend {
         let bundle=ProcessInfo.processInfo.environment["RESTOREGPSTIME_TEST_APP_BUNDLE"].map {URL(fileURLWithPath:$0)} ?? repo.appendingPathComponent("work/test-bundles/arm64-ui-t10a/RestoreGPSTime.app")

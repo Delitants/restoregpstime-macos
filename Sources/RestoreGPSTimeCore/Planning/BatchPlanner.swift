@@ -6,27 +6,31 @@ public struct BatchPlanner:Sendable {
     let clock:any Clock
     let reader:MetadataReader?
     public init(dependencies:DependencyIdentity,clock:any Clock=SystemClock(),reader:MetadataReader?=nil) {self.dependencies=dependencies;self.clock=clock;self.reader=reader}
-    public func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions,progress:@escaping @Sendable (PreparationProgress) async -> Void={_ in}) async throws -> BatchPlan {
+    public func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions,allowUnresolvedDestination:Bool=false,cachedFingerprints:[String:SourceFingerprint]=[:],progress:@escaping @Sendable (PreparationProgress) async -> Void={_ in}) async throws -> BatchPlan {
         let now=clock.now()
-        let worker=Task.detached(priority:.userInitiated) {try await build(items:items,request:request,options:options,now:now,progress:progress)}
+        let worker=Task.detached(priority:.userInitiated) {try await build(items:items,request:request,options:options,now:now,allowUnresolvedDestination:allowUnresolvedDestination,cachedFingerprints:cachedFingerprints,progress:progress)}
         return try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
     }
-    private func build(items:[InspectedItem],request:OperationRequest,options:BatchOptions,now:Date,progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> BatchPlan {
+    static func validateStorageRoots(snapshots:[FileSnapshot],options:BatchOptions) throws {
+        let selectedDirectories=snapshots.filter {$0.kind == .directory}
+        for root in [options.mode == .saveCopies ? options.outputRoot:nil,options.recoveryRoot].compactMap({$0}) {
+            var status=stat()
+            if lstat(root.path,&status) != 0,errno==ENOENT {
+                let parent=try FileIdentityReader().snapshot(at:Self.existingParent(of:root))
+                if selectedDirectories.contains(where:{$0.id.physicalKey==parent.id.physicalKey}) {throw RestoreError(.conflict,"Creating the output or recovery folder here would change a selected source directory. Choose an existing folder or another parent.")}
+            }
+        }
+    }
+    private func build(items:[InspectedItem],request:OperationRequest,options:BatchOptions,now:Date,allowUnresolvedDestination:Bool,cachedFingerprints:[String:SourceFingerprint],progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> BatchPlan {
         if let query=request.placeQuery {
             guard query.maxDistanceKM.isFinite,query.maxDistanceKM>0,query.maxDistanceKM<=20050,(1...10).contains(query.limit) else {throw RestoreError(.invalidInput,"Invalid offline lookup radius or candidate count.")}
         }
         if request.trashHiddenFiles {throw RestoreError(.invalidInput,"Trash uses a separate scoped preview and cannot run in a mutation batch.")}
         if request.removeGPS && request.location != nil {throw RestoreError(.invalidInput,"Choose either location output or location removal in one batch.")}
         if request.stripMetadata && (!request.tags.isEmpty || request.location != nil || request.dates?.embeddedDateRequested == true) {throw RestoreError(.invalidInput,"Metadata stripping cannot be combined with metadata additions.")}
-        if options.mode == .saveCopies && options.outputRoot == nil {throw RestoreError(.invalidInput,"Choose the Save Copies folder.")}
-        let selectedDirectories=items.filter {$0.snapshot.kind == .directory}
-        for root in [options.mode == .saveCopies ? options.outputRoot:nil,options.recoveryRoot].compactMap({$0}) {
-            var status=stat()
-            if lstat(root.path,&status) != 0,errno==ENOENT {
-                let parent=try FileIdentityReader().snapshot(at:Self.existingParent(of:root))
-                if selectedDirectories.contains(where:{$0.snapshot.id.physicalKey==parent.id.physicalKey}) {throw RestoreError(.conflict,"Creating the output or recovery folder here would change a selected source directory. Choose an existing folder or another parent.")}
-            }
-        }
+        let pending=options.mode == .saveCopies && options.outputRoot == nil && allowUnresolvedDestination
+        if options.mode == .saveCopies && options.outputRoot == nil && !pending {throw RestoreError(.invalidInput,"Choose the Save Copies folder.")}
+        try Self.validateStorageRoots(snapshots:items.map(\.snapshot),options:options)
         let identityReader=FileIdentityReader(),capabilities=CapabilityRegistry()
         var resolved=[InspectedItem](),errors=[String:[String]](),dateErrors=[String:String](),fingerprints=[String:SourceFingerprint]()
         await progress(.init(stage:.fingerprinting,total:items.count))
@@ -35,7 +39,9 @@ public struct BatchPlanner:Sendable {
             let key=item.snapshot.id.physicalKey
             if let override=request.placeOverrides[key] {item.place=override}
             do {
-                let fingerprint=try identityReader.fingerprint(at:item.snapshot.url)
+                let fingerprint:SourceFingerprint
+                if let cached=cachedFingerprints[key],try identityReader.snapshot(at:item.snapshot.url)==cached.snapshot {fingerprint=cached}
+                else {fingerprint=try identityReader.fingerprint(at:item.snapshot.url)}
                 fingerprints[key]=fingerprint
                 if fingerprint.snapshot != item.snapshot {errors[key,default:[]].append("The source changed after inspection. Import it again.")}
             } catch {errors[key,default:[]].append(error.localizedDescription)}
@@ -62,9 +68,10 @@ public struct BatchPlanner:Sendable {
             return try AssetGroup(members:members,evidence:group.evidence)
         }
         let rules:VolumeNamingRules
-        if let output=options.outputRoot,options.mode == .saveCopies {rules=try VolumeNamingRules.detect(at:try Self.existingParent(of:output))}
+        if pending {rules=VolumeNamingRules()}
+        else if let output=options.outputRoot,options.mode == .saveCopies {rules=try VolumeNamingRules.detect(at:try Self.existingParent(of:output))}
         else {rules=try resolved.first.map {try VolumeNamingRules.detect(at:$0.snapshot.url.deletingLastPathComponent())} ?? VolumeNamingRules()}
-        let reservations=try NameAllocator().reserve(groups:groups,destinations:.init(root:options.outputRoot,saveCopies:options.mode == .saveCopies,importRoots:options.importRoots,rules:rules),template:request.rename)
+        let reservations=try NameAllocator().reserve(groups:groups,destinations:.init(root:options.outputRoot,saveCopies:options.mode == .saveCopies,importRoots:options.importRoots,rules:rules,provisional:pending),template:request.rename)
         let orderedIDs=reservations.reduce(into:[UUID]()) {if $0.last != $1.groupID {$0.append($1.groupID)}}
         var byGroup=[UUID:AssetGroup]();for group in groups {byGroup[group.id]=group}
         var names=[String:NameReservation]();for name in reservations {names[name.sourceKey]=name}
@@ -123,7 +130,7 @@ public struct BatchPlanner:Sendable {
                     if TagID(rawValue:id)==nil || !tagIDs.insert(id).inserted {reasons.append("Invalid or duplicate metadata destination: \(id).")}
                 }
                 var anchor:DestinationAnchor?
-                do {anchor=try Self.anchor(for:name.finalURL)} catch {reasons.append(error.localizedDescription)}
+                do {anchor=pending ? nil:try Self.anchor(for:name.finalURL)} catch {reasons.append(error.localizedDescription)}
                 var sourceDates=dateMutation
                 if metadataSidecar {sourceDates?.embeddedDate=nil;sourceDates?.embeddedTimestamp=nil;sourceDates?.removeEmbeddedDates=false}
                 let mutation=MutationPlan(dates:sourceDates,tags:metadataSidecar ? []:tags,removeGPS:request.removeGPS,stripMetadata:request.stripMetadata,finder:request.finder,profile:item.metadata.profile,allowedMetadataChanges:.init(tags:metadataSidecar ? []:tagIDs,removesGPS:request.removeGPS,stripsDescriptive:request.stripMetadata))
@@ -154,7 +161,7 @@ public struct BatchPlanner:Sendable {
             await progress(.init(stage:.planning,completed:index,total:orderedIDs.count))
         }
         try Task.checkCancellation()
-        return .init(optionsDigest:try Self.settingsDigest(request:request,options:options),frozenNow:now,dependencies:dependencies,request:request,options:options,groups:planned)
+        return .init(optionsDigest:try Self.settingsDigest(request:request,options:options),frozenNow:now,dependencies:dependencies,request:request,options:options,groups:planned,destinationPending:pending)
     }
     public static func settingsDigest(request:OperationRequest,options:BatchOptions) throws -> String {
         struct Settings:Encodable {let request:OperationRequest;let options:BatchOptions}
@@ -167,7 +174,8 @@ public struct BatchPlanner:Sendable {
     }
     static func qualifyMetadata(_ mutation:MutationPlan,document:MetadataDocument,source:FileSnapshot) async throws {
         guard mutation.changesContent else {return}
-        guard source.kind == .regular,document.diagnostics.isEmpty else {throw RestoreError(.unsupported,"Embedded metadata changes require an available ordinary file without metadata diagnostics.")}
+        guard source.kind == .regular else {throw RestoreError(.unsupported,"Embedded metadata changes require an available ordinary file.")}
+        guard document.diagnostics.isEmpty else {throw RestoreError(.unsupported,"Embedded metadata writing is unavailable: "+document.diagnostics.joined(separator:"; ")+". Location lookup and file renaming can still be previewed separately.")}
         try document.requireQualifiedLayout()
         if mutation.profile.identifier=="XMP",mutation.outputKind != .xmpSidecar {throw RestoreError(.unsupported,"XMP writing is qualified for newly generated sidecars. Existing sidecars remain read-only.")}
         if mutation.stripMetadata {try MetadataStripProfiles().validateStrip(profile:mutation.profile);try MetadataStripProfiles().qualifyStrip(document:document)}

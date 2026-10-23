@@ -19,6 +19,9 @@ public struct PlannedItem:Codable,Equatable,Sendable {
     public let capabilities:[String:CapabilityDecision]
     public let destinationAnchor:DestinationAnchor?
     public let blockingReasons:[String]
+    public init(source:SourceFingerprint,metadata:MetadataDocument,resolution:DateResolution?,place:PlaceMatch?,placeCandidates:[PlaceMatch]?=nil,name:NameReservation,mutation:MutationPlan,capabilities:[String:CapabilityDecision],destinationAnchor:DestinationAnchor?,blockingReasons:[String]) {
+        self.source=source;self.metadata=metadata;self.resolution=resolution;self.place=place;self.placeCandidates=placeCandidates;self.name=name;self.mutation=mutation;self.capabilities=capabilities;self.destinationAnchor=destinationAnchor;self.blockingReasons=blockingReasons
+    }
 }
 public struct PlannedGroup:Codable,Equatable,Sendable {
     public let id:UUID
@@ -36,9 +39,11 @@ public struct BatchPlan:Codable,Equatable,Sendable {
     public let request:OperationRequest
     public let options:BatchOptions
     public let groups:[PlannedGroup]
+    public var unresolvedDestination:Bool?=nil
+    public var destinationPending:Bool {unresolvedDestination==true}
     public var eligibleGroups:[PlannedGroup] {groups.filter {$0.eligibility == .eligible}}
-    public init(id:UUID=UUID(),optionsDigest:String,frozenNow:Date,dependencies:DependencyIdentity,request:OperationRequest,options:BatchOptions,groups:[PlannedGroup]) {
-        schema=1;self.id=id;self.optionsDigest=optionsDigest;self.frozenNow=frozenNow;self.dependencies=dependencies;self.request=request;self.options=options;self.groups=groups
+    public init(id:UUID=UUID(),optionsDigest:String,frozenNow:Date,dependencies:DependencyIdentity,request:OperationRequest,options:BatchOptions,groups:[PlannedGroup],destinationPending:Bool=false) {
+        schema=1;self.id=id;self.optionsDigest=optionsDigest;self.frozenNow=frozenNow;self.dependencies=dependencies;self.request=request;self.options=options;self.groups=groups;self.unresolvedDestination=destinationPending ? true:nil
     }
 }
 public struct PlanConflict:Codable,Equatable,Sendable {public let groupID:UUID?;public let sourceKey:String?;public let error:RestoreError}

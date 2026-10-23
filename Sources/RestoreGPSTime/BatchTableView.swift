@@ -88,7 +88,12 @@ private struct NativeBatchTable:NSViewRepresentable {
             let next=rows.map {[$0.id,$0.url.path,$0.creationText,$0.proposedCreationText,$0.proposedName,$0.status,$0.issue ?? "",$0.thumbnailRevision].joined(separator:"\u{0}")}
             if next != signature || self.size != size {
                 signature=next;self.rows=rows;self.size=size
-                sortRows();table.rowHeight=size.rowHeight;table.reloadData()
+                sortRows();table.rowHeight=size.rowHeight
+                if let fileColumn=table.tableColumn(withIdentifier:NSUserInterfaceItemIdentifier("file")) {
+                    fileColumn.minWidth=max(140,size.points+140)
+                    if fileColumn.width<fileColumn.minWidth {fileColumn.width=fileColumn.minWidth}
+                }
+                table.reloadData()
             }
             if let selected,let index=self.rows.firstIndex(where:{$0.id==selected}) {table.selectRowIndexes(IndexSet(integer:index),byExtendingSelection:false)}
             else {table.deselectAll(nil)}

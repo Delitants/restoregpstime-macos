@@ -11,6 +11,7 @@ public struct PlanValidator:Sendable {
     private func validateBlocking(_ plan:BatchPlan) async -> PlanValidationResult {
         var conflicts=[PlanConflict]()
         func conflict(_ message:String,group:UUID?=nil,source:String?=nil) {conflicts.append(.init(groupID:group,sourceKey:source,error:.init(.conflict,message)))}
+        guard !plan.destinationPending,!(plan.options.mode == .saveCopies && plan.options.outputRoot == nil) else {conflict("Choose the Save Copies folder before applying changes.");return .init(conflicts:conflicts)}
         guard plan.schema==1 else {conflict("Unsupported batch plan schema.");return .init(conflicts:conflicts)}
         do {
             if try BatchPlanner.settingsDigest(request:plan.request,options:plan.options) != plan.optionsDigest {conflict("The plan's operation settings changed. Preview again.")}

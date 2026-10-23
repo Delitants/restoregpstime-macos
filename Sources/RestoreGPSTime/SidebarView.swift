@@ -1,9 +1,11 @@
 import SwiftUI
+import RestoreGPSTimeCore
 
 enum WorkspaceSection:String,CaseIterable,Identifiable {
     case dates="Dates & time",places="Location names",metadata="Metadata",finder="Finder attributes",workflows="Workflows",recovery="Backups & undo"
     var id:Self {self}
     var symbol:String {switch self {case .dates:return "clock.arrow.circlepath";case .places:return "mappin.and.ellipse";case .metadata:return "tag";case .finder:return "folder.badge.gearshape";case .workflows:return "square.stack";case .recovery:return "arrow.uturn.backward"}}
+    var previewComponent:PreviewComponent? {switch self {case .dates:return .dates;case .places:return .places;case .metadata:return .metadata;case .finder:return .finder;default:return nil}}
     var isUtility:Bool {self == .workflows || self == .recovery}
 }
 struct SidebarView:View {
