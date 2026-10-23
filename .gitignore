@@ -13,3 +13,15 @@ __pycache__/
 /docs/acceptance/
 /docs/RELEASE.md
 /docs/REFERENCE.md
+
+/AGENTS.md
+/internal/
+/plans/
+/reports/
+/test-reports/
+/evidence/
+/release-evidence.json
+/RELEASE-INFO.json
+/docs/internal/
+/docs/plans/
+/docs/reports/

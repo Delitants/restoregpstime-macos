@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fail-closed stable release contract. Never uploads or changes GitHub state."""
 import argparse,hashlib,json,pathlib,re,subprocess,sys
+from publication_guard import release_file_errors
 CURRENT_OS_MAJOR_BY_ARCH={'arm64':27,'x86_64':26}
 REQUIRED_GATES=('baseline-regression','genuine-formats','large-video','volumes','native-ui','finder-services-droplets','finder-isolated-login','instruments-10000','relocated-offline','source-review')
 COMMON_ASSETS={'INSTALL.md','RECOVERY.md','KNOWN-LIMITS.md','THIRD-PARTY-NOTICES.txt','DEPENDENCY-LICENSES.zip','LICENSE.txt'}
@@ -103,7 +104,7 @@ def public_asset_hashes(m,root):
     names=[a.get('name') for a in assets]
     if len(names)!=len(required) or set(names)!=required:
         raise ValueError('Public asset inventory differs from user downloads and documents')
-    errors=verify_assets(m,root)
+    errors=verify_assets(m,root)+release_file_errors(root,names)
     checksums=root/'SHA256SUMS.txt'
     if errors or checksums.is_symlink() or not checksums.is_file():
         raise ValueError('; '.join(errors) or 'Missing public checksum file')

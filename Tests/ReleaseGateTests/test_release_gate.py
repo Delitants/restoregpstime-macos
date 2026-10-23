@@ -1,4 +1,5 @@
-import copy,importlib.util,pathlib,unittest
+import copy,importlib.util,pathlib,sys,unittest
+sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[2]/'Scripts'))
 spec=importlib.util.spec_from_file_location('release_gate',pathlib.Path(__file__).resolve().parents[2]/'Scripts/release_gate.py')
 gate=importlib.util.module_from_spec(spec);spec.loader.exec_module(gate)
 SHA='a'*40
@@ -29,7 +30,10 @@ class ReleaseGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root=pathlib.Path(temporary);m=valid();m['assets']=[]
             for name in sorted(names):
-                (root/name).write_text('public '+name)
+                if name.endswith('.zip'):
+                    import zipfile
+                    with zipfile.ZipFile(root/name,'w') as z:z.writestr('LICENSE.txt','license')
+                else:(root/name).write_text('public '+name)
                 m['assets'].append({'name':name,'sha256':gate.sha256(root/name)})
             (root/'SHA256SUMS.txt').write_text(''.join(a['sha256']+'  '+a['name']+'\n' for a in m['assets']))
             (root/'release-evidence.json').write_text('private qualification details')
@@ -42,6 +46,27 @@ class ReleaseGateTests(unittest.TestCase):
             duplicate=copy.deepcopy(m);duplicate['assets'].append(duplicate['assets'][0])
             with self.assertRaises(ValueError):gate.public_asset_hashes(duplicate,root)
             (root/next(iter(names))).write_text('changed after manifest')
+            with self.assertRaises(ValueError):gate.public_asset_hashes(m,root)
+    def testUploadRejectsReportsInsideAllowedArchivesOrUserHelp(self):
+        import tempfile,zipfile
+        with tempfile.TemporaryDirectory() as temporary:
+            root=pathlib.Path(temporary);m=valid()
+            for asset in m['assets']:
+                path=root/asset['name']
+                if path.suffix=='.zip':
+                    with zipfile.ZipFile(path,'w') as z:z.writestr('LICENSE.txt','license')
+                else:path.write_text('User help')
+                asset['sha256']=gate.sha256(path)
+            (root/'SHA256SUMS.txt').write_text('public sums')
+            gate.public_asset_hashes(m,root)
+            archive=next(a for a in m['assets'] if a['name'].endswith('AppleSilicon.zip'))
+            with zipfile.ZipFile(root/archive['name'],'a') as z:z.writestr('docs/acceptance/EVIDENCE.md','private report')
+            archive['sha256']=gate.sha256(root/archive['name'])
+            with self.assertRaises(ValueError):gate.public_asset_hashes(m,root)
+            with zipfile.ZipFile(root/archive['name'],'w') as z:z.writestr('LICENSE.txt','license')
+            archive['sha256']=gate.sha256(root/archive['name'])
+            (root/'INSTALL.md').write_text('# Implementation plan\nInternal details')
+            next(a for a in m['assets'] if a['name']=='INSTALL.md')['sha256']=gate.sha256(root/'INSTALL.md')
             with self.assertRaises(ValueError):gate.public_asset_hashes(m,root)
     def testCurrentOSIsBoundToEachArchitecturesSupportedMacs(self):
         m=valid();m['currentOSMajorByArchitecture']={'arm64':27,'x86_64':26}

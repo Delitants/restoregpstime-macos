@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse,json,pathlib,plistlib,subprocess,tempfile,zipfile
-from release_gate import COMMON_ASSETS,inspect_app,release_names,sha256,validate_manifest,validate_pair,verify_assets,gatekeeper_accepted
+from publication_guard import directory_errors
+from release_gate import public_asset_hashes, COMMON_ASSETS,inspect_app,release_names,sha256,validate_manifest,validate_pair,verify_assets,gatekeeper_accepted
 def tree_hashes(app):
  result={}
  for path in sorted(app.rglob('*')):
@@ -15,6 +16,7 @@ def run(args,name):
  return r
 try:
  m=json.loads((root/'release-evidence.json').read_text());errors+=validate_manifest(m)+verify_assets(m,root)
+ public_asset_hashes(m,root)
  if m.get('architecture')!=a.arch or m.get('sourceCommit')!=a.source_commit:errors.append('Requested architecture/source differs from manifest')
  if a.peer_manifest:errors+=validate_pair(m,json.loads(pathlib.Path(a.peer_manifest).read_text()))
  else:errors.append('Matching peer manifest is required for stable publication')
@@ -35,6 +37,7 @@ try:
   if total>2_147_483_648:raise ValueError('App ZIP exceeds its two GiB extraction bound')
  run(['/usr/bin/ditto','-x','-k',str(root/zipname),str(work/'extracted')],'extract-zip')
  app=work/'extracted/RestoreGPSTime.app'
+ errors+=directory_errors(app)
  run([str(pathlib.Path(__file__).resolve().parent/'audit-bundle-paths.py'),'--app',str(app),'--repository',str(pathlib.Path(__file__).resolve().parents[1])],'personal-build-path-audit')
  inventory=inspect_app(app)
  if inventory!=m.get('binaries'):errors.append('Extracted app Mach-O inventory differs from manifest')
@@ -61,6 +64,7 @@ try:
  attached=run(['/usr/bin/hdiutil','attach','-readonly','-nobrowse','-mountpoint',str(mount),str(root/dmg)],'dmg-attach')
  if attached.returncode==0:
   try:
+   errors+=directory_errors(mount)
    if tree_hashes(mount/'RestoreGPSTime.app')!=tree_hashes(app):errors.append('DMG and ZIP apps differ')
    link=mount/'Applications'
    if not link.is_symlink() or str(link.readlink())!='/Applications':errors.append('DMG Applications link differs')

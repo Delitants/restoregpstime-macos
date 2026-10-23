@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Publish only a fully checked candidate; retain receipts and never clobber."""
 import argparse,json,pathlib,subprocess,tempfile
+from publication_guard import history_errors
 from release_gate import public_asset_hashes,sha256,upload_disposition,validate_pair,verify_assets,validate_publication_target
 p=argparse.ArgumentParser();p.add_argument('--repository',required=True,choices=['Delitants/restoregpstime-macos']);p.add_argument('--tag',required=True,choices=['v1.0.0-arm64','v1.0.0-x86_64']);p.add_argument('--manifest',required=True);p.add_argument('--peer-manifest',required=True);a=p.parse_args()
 manifest=pathlib.Path(a.manifest).resolve();peer=pathlib.Path(a.peer_manifest).resolve();root=manifest.parent
@@ -11,6 +12,9 @@ if errors:raise SystemExit('Publication blocked: '+'; '.join(errors))
 repo_root=pathlib.Path(__file__).resolve().parents[1]
 source=subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo_root,text=True).strip()
 if source!=m['sourceCommit'] or subprocess.check_output(['git','status','--porcelain'],cwd=repo_root,text=True).strip():raise SystemExit('Publication requires the exact clean reviewed source checkout')
+source_errors=history_errors(repo_root,source)
+if source_errors:raise SystemExit('Publication blocked: '+'; '.join(source_errors))
+expected=public_asset_hashes(m,root)
 # Re-run actual archive/signature checks before any API call that mutates state.
 subprocess.run([str(repo_root/'Scripts/check-release.sh'),'--directory',str(root),'--arch',m['architecture'],'--source-commit',source,'--peer-manifest',str(peer)],check=True)
 subprocess.run([str(repo_root/'Scripts/check-release.sh'),'--directory',str(peer.parent),'--arch',other['architecture'],'--source-commit',source,'--peer-manifest',str(manifest)],check=True)
@@ -39,7 +43,6 @@ if release is None:
  release=api(f'repos/{a.repository}/releases','-X','POST','-f','tag_name='+a.tag,'-f','target_commitish='+source,'-f','name=RestoreGPSTime 1.0.0 ('+m['architecture']+')','-f','body=Restore photo and video dates and place names on macOS 13+. See the attached installation and undo help.','-F','draft=true')
 target_errors=validate_publication_target(release,obj.get('sha') if ref else None,source)
 if target_errors:raise SystemExit('; '.join(target_errors))
-expected=public_asset_hashes(m,root)
 allowed=set(expected)
 existing={x['name']:x for x in release['assets']}
 if not set(existing).issubset(allowed):raise SystemExit('Existing release contains unexpected assets; retain and review it')

@@ -9,6 +9,7 @@ case "$arch" in arm64) label=AppleSilicon;; x86_64) label=Intel;; *) exit 2;; es
 [ "$version" = 1.0.0 ] && [ -n "$output" ]
 cd "$repo_root"
 [ "$(git rev-parse HEAD)" = "$source" ] && [ -z "$(git status --porcelain)" ] || { echo 'Package the exact clean source commit only.' >&2;exit 2; }
+python3 Scripts/publication_guard.py --history HEAD
 [ ! -e "$output" ] || { echo 'Output exists; failed evidence is never overwritten.' >&2;exit 2; }
 mkdir -p "$output";output=$(cd "$output" && pwd)
 Scripts/build-app.sh --arch "$arch" --configuration release --output "$output/build" > "$output/build.log" 2>&1
