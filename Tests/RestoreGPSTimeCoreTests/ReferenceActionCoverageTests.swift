@@ -13,7 +13,11 @@ final class ReferenceActionCoverageTests:CoreTestCase {
         try validateOwners(rows)
     }
     private func matrix(_ name:String) throws -> [[String]] {
-        let text=try String(contentsOf:repository.appendingPathComponent("docs/acceptance/"+name),encoding:.utf8)
+        let inventory=repository.appendingPathComponent("docs/acceptance/"+name)
+        guard FileManager.default.fileExists(atPath:inventory.path) else {
+            throw XCTSkip("Local reference inventory is not present.")
+        }
+        let text=try String(contentsOf:inventory,encoding:.utf8)
         // The first four inventory columns contain no quoted commas; later prose may.
         return try text.split(whereSeparator:\.isNewline).dropFirst().map {line in
             let columns=line.split(separator:",",maxSplits:4,omittingEmptySubsequences:false).map(String.init)

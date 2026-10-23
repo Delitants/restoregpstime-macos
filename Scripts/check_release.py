@@ -18,7 +18,7 @@ try:
  if m.get('architecture')!=a.arch or m.get('sourceCommit')!=a.source_commit:errors.append('Requested architecture/source differs from manifest')
  if a.peer_manifest:errors+=validate_pair(m,json.loads(pathlib.Path(a.peer_manifest).read_text()))
  else:errors.append('Matching peer manifest is required for stable publication')
- expected=release_names(m.get('version'),a.arch)|COMMON_ASSETS|{'release-evidence.json'}
+ expected=release_names(m.get('version'),a.arch)|COMMON_ASSETS
  lines=(root/'SHA256SUMS.txt').read_text().splitlines();seen=set()
  for line in lines:
   digest,name=line.split('  ',1)

@@ -1,35 +1,28 @@
-# Install RestoreGPSTime
+# Install and use RestoreGPSTime
 
-RestoreGPSTime targets macOS 13 and newer. Choose **AppleSilicon** for an Apple Silicon Mac or **Intel** for an Intel Mac. Each download contains only its named architecture. The two 0.2.0 downloads are self-signed previews: Apple Silicon was tested natively and Intel through Rosetta on Apple Silicon. Physical Intel/macOS 13 qualification and Apple notarization remain pending.
+Requires macOS 13+. Download **Apple Silicon** or **Intel** for your Mac, expand the ZIP, and move RestoreGPSTime into Applications.
 
-For these preview releases, verify the download against the attached `SHA256SUMS.txt`, expand the ZIP and move RestoreGPSTime.app into Applications. The public `.cer` file documents the self-signed identity and contains no private key. It is not an Apple-issued certificate. macOS may block the downloaded app or show an unidentified-developer warning; these previews do not establish Apple Gatekeeper trust.
+These downloads are self-signed and unnotarized. If macOS blocks the first launch, choose **Done**, then open **System Settings → Privacy & Security → Open Anyway** and confirm **Open**. [Apple's instructions](https://support.apple.com/en-us/102445). You do not need to install the attached certificate.
 
-## Opening the self-signed preview
+To check a download, place the release attachments in one folder and run `shasum -a 256 -c SHA256SUMS.txt` there.
 
-If macOS says **“Apple could not verify … free of malware”** or that the developer cannot be verified, the initial alert may offer **Move to Trash** and **Done**. The approval control is in System Settings:
+## Make changes
 
-1. Choose **Done** (or **Cancel**) to keep the app.
-2. After trying to open RestoreGPSTime, open **System Settings → Privacy & Security** and scroll down to Security.
-3. Click **Open Anyway** for RestoreGPSTime, then confirm **Open**. Authenticate if macOS requests it.
+1. Add files or folders and choose **Save copies** or **Change originals**.
+2. Select the changes you want, then click **Preview changes** in each tab you use. Switching tabs keeps your previews.
+3. Review the proposed dates and names. Select a file and open **File details** for explanations or blocked reasons.
+4. Click **Apply Changes**. If saving copies, choose the destination when asked.
 
-macOS saves an exception for this app so subsequent launches can use a normal double-click. [Apple documents this procedure](https://support.apple.com/en-us/102445). Since macOS Sequoia, [Control-click no longer overrides Gatekeeper](https://developer.apple.com/news/?id=saqachfa); use the Settings procedure. Managed Macs may restrict approval.
+If you change settings, preview that tab again. Thumbnails are optional; settings are remembered when you close the app.
 
-The app cannot choose the wording or buttons in macOS security alerts. A self-signed certificate cannot replace Apple Developer ID signing and notarization. Do not install the supplied certificate as a trusted root or disable Gatekeeper to install this preview. If the alert says **“is damaged”** or **“will damage your computer”**, retain the downloaded file and report the exact alert and download version for investigation.
+## Dates and locations
 
-## Using the app
+Missing UTC offsets are handled automatically using the embedded offset, then an estimated GPS time zone, then the **Fallback time zone for this batch** you select. Choose where those remaining photos were taken.
 
-For a completed stable release, verify the archive against `SHA256SUMS.txt`, open the DMG and drag RestoreGPSTime into Applications, or expand the ZIP and move the app there. Open it normally. Stable downloads must pass Gatekeeper with Developer ID signing and notarization. Do not disable Gatekeeper to install a development candidate.
+Place lookup works offline. Matches are nearby cities and countries; review the results before renaming. You can choose another match or enter a correction.
 
-The metadata engine, Perl runtime and offline place database are bundled. No Homebrew, separate Perl, online map, account or location permission is required. All media processing and coordinate lookup stay on the Mac.
+## Backups
 
-Start with disposable copies. Add files or folders and choose operations. **Preview changes** previews the current tab only; preview each selected tab before **Apply Changes**. Switching tabs keeps results. Preview does not require an output folder; Save copies asks for a folder when you apply. Select a row and open **File details** to review date provenance, approximate places, metadata destinations and proposed names. Changed settings make the affected preview stale. The header displays the installed version. Optional thumbnails default to Off; size and other settings persist across launches.
+Changing originals uses **Metadata backup** by default. Keep the processed files unchanged so they can be restored. Choose **Full backup** to keep entire originals, or **No backup** to turn off undo.
 
-Automatic missing-offset handling is enabled by default: embedded offset, then an offline GPS city-zone estimate, then one **Fallback time zone for this batch** selected for files without usable GPS. Preview Dates & time again after changing the fallback. No fallback is silently taken from your Mac.
-
-**Change originals** defaults to **Metadata backup**, a compact private database for exact per-file undo. Keep the unchanged processed media; it is required to reconstruct originals. Select **Full backup** to retain entire originals or **No backup** for no undo after a successful batch. Temporary protection is used while a transaction is unfinished. **Advanced backup settings** chooses backup storage. Open **More tools → Backups & undo** to select individual files or undo a batch; linked photo/video assets restore together.
-
-Location matches are nearby populated places, not verified addresses or GPS accuracy corrections. Set the maximum distance and choose a candidate or manual correction. Missing GPS/capture metadata remains visible; the app does not invent it.
-
-Workflows contain data-only operation settings. Opened workflows, Services input and exported droplets bring files to review; they never apply automatically. A droplet needs the main application installed. Finder visibility and hidden-file Trash are separate Tools actions with explicit previews.
-
-Use **More → Export report** for a local JSON/CSV export. Coordinates are omitted by default; paths, place names, selected changes and recovery references are included. Share only a report you have reviewed.
+[Backups and undo](RECOVERY.md) · [Known limits](KNOWN-LIMITS.md)

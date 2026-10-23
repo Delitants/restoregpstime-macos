@@ -9,3 +9,7 @@ __pycache__/
 *.pyc
 
 /docs/superpowers/
+
+/docs/acceptance/
+/docs/RELEASE.md
+/docs/REFERENCE.md

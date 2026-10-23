@@ -13,6 +13,36 @@ def valid(arch='arm64'):
 
 class ReleaseGateTests(unittest.TestCase):
     def testCompleteSyntheticContract(self):self.assertEqual(gate.validate_manifest(valid()),[])
+    def testReleaseRequiresUserDocumentsWithoutInternalInventories(self):
+        m=valid()
+        internal={'format-matrix.json','reference-actions.csv','reference-tools.csv'}
+        m['assets']=[a for a in m['assets'] if a['name'] not in internal]
+        self.assertEqual(gate.validate_manifest(m),[])
+        for name in internal|{'release-evidence.json','RELEASE-INFO.json'}:
+            extra=copy.deepcopy(m);extra['assets'].append({'name':name,'sha256':'c'*64})
+            self.assertTrue(gate.validate_manifest(extra),name)
+    def testUploadInventoryKeepsLocalReportsPrivate(self):
+        import tempfile
+        names={'RestoreGPSTime-1.0.0-AppleSilicon.zip','RestoreGPSTime-1.0.0-AppleSilicon.dmg',
+               'INSTALL.md','RECOVERY.md','KNOWN-LIMITS.md','THIRD-PARTY-NOTICES.txt',
+               'DEPENDENCY-LICENSES.zip','LICENSE.txt'}
+        with tempfile.TemporaryDirectory() as temporary:
+            root=pathlib.Path(temporary);m=valid();m['assets']=[]
+            for name in sorted(names):
+                (root/name).write_text('public '+name)
+                m['assets'].append({'name':name,'sha256':gate.sha256(root/name)})
+            (root/'SHA256SUMS.txt').write_text(''.join(a['sha256']+'  '+a['name']+'\n' for a in m['assets']))
+            (root/'release-evidence.json').write_text('private qualification details')
+            (root/'build.log').write_text('private build details')
+            expected={name:gate.sha256(root/name) for name in names|{'SHA256SUMS.txt'}}
+            self.assertEqual(gate.public_asset_hashes(m,root),expected)
+            for name in ['release-evidence.json','build.log']:
+                extra=copy.deepcopy(m);extra['assets'].append({'name':name,'sha256':gate.sha256(root/name)})
+                with self.assertRaises(ValueError):gate.public_asset_hashes(extra,root)
+            duplicate=copy.deepcopy(m);duplicate['assets'].append(duplicate['assets'][0])
+            with self.assertRaises(ValueError):gate.public_asset_hashes(duplicate,root)
+            (root/next(iter(names))).write_text('changed after manifest')
+            with self.assertRaises(ValueError):gate.public_asset_hashes(m,root)
     def testCurrentOSIsBoundToEachArchitecturesSupportedMacs(self):
         m=valid();m['currentOSMajorByArchitecture']={'arm64':27,'x86_64':26}
         for host in m['hosts']:

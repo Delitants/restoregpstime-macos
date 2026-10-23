@@ -44,7 +44,6 @@ PY
  xcrun stapler staple "$output/$name.dmg" >> "$output/signing/staple.txt" 2>&1
 fi
 cp docs/{INSTALL,RECOVERY,KNOWN-LIMITS}.md "$output/"
-cp docs/acceptance/{format-matrix.json,reference-actions.csv,reference-tools.csv} "$output/"
 cp ThirdParty/NOTICES.txt "$output/THIRD-PARTY-NOTICES.txt"
 cp LICENSE "$output/LICENSE.txt"
 /usr/bin/ditto -c -k --keepParent ThirdParty "$output/DEPENDENCY-LICENSES.zip"

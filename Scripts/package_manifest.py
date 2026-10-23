@@ -16,4 +16,4 @@ m={'schema':1,'application':'RestoreGPSTime','version':a.version,'architecture':
  'note':'Local candidate. Review and bind actual acceptance/signing evidence before stable checks; missing is not pass.'}
 with (root/'release-evidence.json').open('x') as f:json.dump(m,f,indent=2,sort_keys=True);f.write('\n')
 with (root/'SHA256SUMS.txt').open('x') as f:
- for name in sorted([x['name'] for x in assets]+['release-evidence.json']):f.write(sha256(root/name)+'  '+name+'\n')
+ for name in sorted(x['name'] for x in assets):f.write(sha256(root/name)+'  '+name+'\n')

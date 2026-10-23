@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Publish only a fully checked candidate; retain receipts and never clobber."""
 import argparse,json,pathlib,subprocess,tempfile
-from release_gate import COMMON_ASSETS,release_names,sha256,upload_disposition,validate_pair,verify_assets,validate_publication_target
+from release_gate import public_asset_hashes,sha256,upload_disposition,validate_pair,verify_assets,validate_publication_target
 p=argparse.ArgumentParser();p.add_argument('--repository',required=True,choices=['Delitants/restoregpstime-macos']);p.add_argument('--tag',required=True,choices=['v1.0.0-arm64','v1.0.0-x86_64']);p.add_argument('--manifest',required=True);p.add_argument('--peer-manifest',required=True);a=p.parse_args()
 manifest=pathlib.Path(a.manifest).resolve();peer=pathlib.Path(a.peer_manifest).resolve();root=manifest.parent
 m=json.loads(manifest.read_text());other=json.loads(peer.read_text())
@@ -36,12 +36,11 @@ if ref:
  if obj.get('type')!='commit' or obj.get('sha')!=source:raise SystemExit('Existing tag points to different content; never replace it')
 release=api(f'repos/{a.repository}/releases/tags/{a.tag}',optional=True)
 if release is None:
- release=api(f'repos/{a.repository}/releases','-X','POST','-f','tag_name='+a.tag,'-f','target_commitish='+source,'-f','name=RestoreGPSTime 1.0.0 ('+m['architecture']+')','-f','body=Native macOS 13+ release. See the attached installation, recovery, format and evidence documents.','-F','draft=true')
+ release=api(f'repos/{a.repository}/releases','-X','POST','-f','tag_name='+a.tag,'-f','target_commitish='+source,'-f','name=RestoreGPSTime 1.0.0 ('+m['architecture']+')','-f','body=Restore photo and video dates and place names on macOS 13+. See the attached installation and undo help.','-F','draft=true')
 target_errors=validate_publication_target(release,obj.get('sha') if ref else None,source)
 if target_errors:raise SystemExit('; '.join(target_errors))
-expected={x['name']:x['sha256'] for x in m['assets']}
-expected['release-evidence.json']=sha256(manifest);expected['SHA256SUMS.txt']=sha256(root/'SHA256SUMS.txt')
-allowed=release_names('1.0.0',m['architecture'])|COMMON_ASSETS|{'release-evidence.json','SHA256SUMS.txt'}
+expected=public_asset_hashes(m,root)
+allowed=set(expected)
 existing={x['name']:x for x in release['assets']}
 if not set(existing).issubset(allowed):raise SystemExit('Existing release contains unexpected assets; retain and review it')
 

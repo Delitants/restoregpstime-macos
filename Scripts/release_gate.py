@@ -3,7 +3,7 @@
 import argparse,hashlib,json,pathlib,re,subprocess,sys
 CURRENT_OS_MAJOR_BY_ARCH={'arm64':27,'x86_64':26}
 REQUIRED_GATES=('baseline-regression','genuine-formats','large-video','volumes','native-ui','finder-services-droplets','finder-isolated-login','instruments-10000','relocated-offline','source-review')
-COMMON_ASSETS={'format-matrix.json','reference-actions.csv','reference-tools.csv','INSTALL.md','RECOVERY.md','KNOWN-LIMITS.md','THIRD-PARTY-NOTICES.txt','DEPENDENCY-LICENSES.zip','LICENSE.txt'}
+COMMON_ASSETS={'INSTALL.md','RECOVERY.md','KNOWN-LIMITS.md','THIRD-PARTY-NOTICES.txt','DEPENDENCY-LICENSES.zip','LICENSE.txt'}
 def sha256(path):
     h=hashlib.sha256()
     with pathlib.Path(path).open('rb') as f:
@@ -95,6 +95,19 @@ def verify_assets(m,root):
         p=root/name
         if p.is_symlink() or not p.is_file() or sha256(p)!=asset.get('sha256'):errors.append('Missing/changed asset: '+name)
     return errors
+
+def public_asset_hashes(m,root):
+    root=pathlib.Path(root)
+    required=release_names(m.get('version'),m.get('architecture'))|COMMON_ASSETS
+    assets=m.get('assets',[])
+    names=[a.get('name') for a in assets]
+    if len(names)!=len(required) or set(names)!=required:
+        raise ValueError('Public asset inventory differs from user downloads and documents')
+    errors=verify_assets(m,root)
+    checksums=root/'SHA256SUMS.txt'
+    if errors or checksums.is_symlink() or not checksums.is_file():
+        raise ValueError('; '.join(errors) or 'Missing public checksum file')
+    return {**{a['name']:a['sha256'] for a in assets},'SHA256SUMS.txt':sha256(checksums)}
 
 def inspect_app(app):
     app=pathlib.Path(app);result=[]
