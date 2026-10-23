@@ -69,7 +69,9 @@ final class BatchHelperFaultTests:AppTestCase {
         let reader=MetadataReader(paths:paths),snapshots=try urls.map {try FileIdentityReader().snapshot(at:$0)}
         let tasks=(0..<3).map {_ in Task {try await reader.readBatch(snapshots:snapshots)}}
         var pids=[Int32]()
-        for _ in 0..<300 {
+        // Allow cold Rosetta/security validation before cancelling real started children.
+        let startupDeadline=ProcessInfo.processInfo.systemUptime+15
+        while ProcessInfo.processInfo.systemUptime<startupDeadline {
             pids=try FileManager.default.contentsOfDirectory(at:marker.deletingLastPathComponent(),includingPropertiesForKeys:nil).filter {$0.lastPathComponent.hasPrefix("child-")}.compactMap {try? String(contentsOf:$0).trimmingCharacters(in:.whitespacesAndNewlines)}.compactMap(Int32.init)
             if pids.count==2 {break};try await Task.sleep(nanoseconds:10_000_000)
         }
@@ -88,7 +90,9 @@ final class BatchHelperFaultTests:AppTestCase {
         let backend=LiveAppBackend(paths:paths)
         let task=Task {try await backend.inspectDetailed(urls,options:DiscoveryOptions(),progress:{_ in})}
         var children=[URL]()
-        for _ in 0..<300 {
+        // Allow cold Rosetta/security validation before cancelling real started children.
+        let startupDeadline=ProcessInfo.processInfo.systemUptime+15
+        while ProcessInfo.processInfo.systemUptime<startupDeadline {
             children=try FileManager.default.contentsOfDirectory(at:folder,includingPropertiesForKeys:nil).filter {$0.lastPathComponent.hasPrefix("child-")}
             if children.count==1 {break};try await Task.sleep(nanoseconds:10_000_000)
         }
