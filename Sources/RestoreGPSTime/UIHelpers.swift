@@ -3,6 +3,10 @@ import AppKit
 import UniformTypeIdentifiers
 import RestoreGPSTimeCore
 
+var appVersionText:String {
+    Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "development"
+}
+
 @MainActor enum Panels {
     static func importFiles() async -> [URL] {
         let panel=NSOpenPanel();panel.title="Add photos, videos, or folders";panel.canChooseFiles=true;panel.canChooseDirectories=true;panel.allowsMultipleSelection=true

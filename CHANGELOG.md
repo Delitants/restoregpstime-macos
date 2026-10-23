@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 — self-signed preview
+
+- Handle missing UTC offsets automatically by default in new app sessions: embedded offset, then offline GPS city time zone within 25 km, then one fallback zone selected for the batch.
+- Apply capture-date daylight-saving rules, retain strict DST ambiguity checks, and show GPS estimates or fallback provenance in File details. Saved policies retain their previous behavior.
+- Display the app version in the window title and file-list header.
+- Include the counted preview progress and batched metadata improvements from 0.1.1 below.
+
 ## 0.1.1 — self-signed preview
 
 - Counted progress for metadata reading, file-content checks and planning, with cancellation and stale-update protection.

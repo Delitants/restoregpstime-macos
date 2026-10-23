@@ -75,6 +75,11 @@ class AppTestCase:XCTestCase {
     }
 }
 final class AppModelTests:AppTestCase {
+    @MainActor func testAutomaticTimezoneIsEnabledByDefaultWithoutSilentFallback() {
+        let model=AppModel(backend:FakeAppBackend(items:[]))
+        XCTAssertEqual(model.request.dates?.automaticTimeZone,true)
+        XCTAssertNil(model.request.dates?.timeZoneID)
+    }
     @MainActor func testCancelAndReimportRejectsLateImportProgress() async throws {
         let input=try item(),backend=FakeAppBackend(items:[input]),model=AppModel(backend:backend)
         await backend.delayInspection()

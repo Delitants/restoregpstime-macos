@@ -100,7 +100,7 @@ struct WorkspaceView:View {
                         Text(entry.reason).textSelection(.enabled)
                     }.padding(.vertical,6)
                 }
-                Text("For dates without a UTC offset, set the camera’s time zone under Time zone and video settings. Dates with their own offset keep it. Preview again after changing settings.").font(.caption)
+                Text("Automatic mode uses each photo’s embedded offset or GPS-based time zone. Select one batch fallback for files without either. Preview again after changing settings.").font(.caption)
             }.padding(20).frame(width:580,height:460)
         }
     }
@@ -108,6 +108,7 @@ struct WorkspaceView:View {
         HStack(spacing:12) {
             Button {Task {let urls=await Panels.importFiles();if !urls.isEmpty {_ = await session.openURLs(urls);section = .dates}}} label:{Label("Add files",systemImage:"plus")}.fixedSize().keyboardShortcut("o").disabled(model.isBusy)
             Text("\(model.rows.count) \(model.rows.count == 1 ? "file":"files")").font(.caption).foregroundStyle(.secondary)
+            Text("v\(appVersionText)").font(.caption).foregroundStyle(.secondary).accessibilityLabel("Version \(appVersionText)")
             Spacer()
             if utility {Button("Back to batch") {section = .dates}.fixedSize()}
             else {Button {inspectorVisible=true} label:{Label("File details",systemImage:"info.circle")}.fixedSize().disabled(selection==nil).keyboardShortcut("i")}

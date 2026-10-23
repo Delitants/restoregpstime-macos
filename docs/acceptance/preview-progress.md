@@ -4,7 +4,7 @@ Version 0.1.1 adds counted metadata-reading, source-fingerprint and group-planni
 
 Metadata inspection batches at most 32 files per helper, with at most two chunks active. Every JSON record must match its requested source path and order. Batch-level failures fall back to individual reads, preserving per-file diagnostics; cancellation stops this fallback. A nonzero helper exit is accepted as a per-file failure only for ExifTool's file-error status with an explicit error record, not merely a warning.
 
-The blocked-reasons sheet counts distinct affected groups per reason. A group can appear under several reasons. No default camera time zone is guessed. Selecting the camera's zone resolves offset-free wall-clock dates; embedded UTC offsets keep priority. Linked assets are still applied as protected groups, so the group count can differ from the file count.
+The blocked-reasons sheet counts distinct affected groups per reason. A group can appear under several reasons. No default camera time zone is guessed. Version 0.1.2 enables automatic GPS city time zones in new app sessions, with one selected batch fallback for files without usable GPS. Embedded UTC offsets keep priority. Linked assets are still applied as protected groups, so the group count can differ from the file count.
 
 Full source fingerprints, dependency identities and pre-commit revalidation remain enabled. Preview can therefore take time on external drives, network volumes or large media. The progress bar counts completed files within each stage and can pause while one large file is read; it is not a whole-operation time estimate.
 

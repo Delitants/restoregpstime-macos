@@ -33,7 +33,7 @@ struct BlockingReasonSummary:Identifiable,Equatable {
     var id:String {reason}
 }
 @MainActor final class AppModel:ObservableObject {
-    @Published var request:OperationRequest={var value=OperationRequest();value.dates=DatePolicy();return value}() {didSet {invalidatePreview()}}
+    @Published var request:OperationRequest={var value=OperationRequest();var dates=DatePolicy();dates.automaticTimeZone=true;value.dates=dates;return value}() {didSet {invalidatePreview()}}
     @Published var options=BatchOptions() {didSet {invalidatePreview()}}
     @Published var discovery:DiscoveryOptions={var value=DiscoveryOptions();value.includeFolders=false;value.enumerateRootContents=true;return value}() {didSet {invalidatePreview()}}
     @Published private(set) var phase:AppPhase = .idle

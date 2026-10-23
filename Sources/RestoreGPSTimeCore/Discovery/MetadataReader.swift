@@ -13,7 +13,7 @@ public actor MetadataReader {
         let outcome:Result<MetadataDocument,Error>
         do {
             if Task.isCancelled { throw RestoreError(.cancelled,"Metadata inspection cancelled.") }
-            let args=["-j","-G1:4","-a","-s","-n","-struct","-charset","filename=UTF8","-api","LargeFileSupport=1","--",snapshot.url.path]
+            let args=["-j","-G1:4","-a","-s","-n","-struct","-charset","filename=UTF8","-api","LargeFileSupport=1","-api","Geolocation=1","-api","GeolocMaxDist=25","--",snapshot.url.path]
             helperLaunches+=1
             let result=try await ProcessRunner().run(executable:paths.perl,arguments:paths.exifArguments(args),environment:paths.environment,timeout:60)
             let document=try MetadataDecoder().decode(result.stdout)
@@ -35,7 +35,7 @@ public actor MetadataReader {
         let outcome:Result<[MetadataDocument],Error>
         do {
             try Task.checkCancellation()
-            let args=["-j","-G1:4","-a","-s","-n","-struct","-charset","filename=UTF8","-api","LargeFileSupport=1","--"]+files.map { $0.url.path }
+            let args=["-j","-G1:4","-a","-s","-n","-struct","-charset","filename=UTF8","-api","LargeFileSupport=1","-api","Geolocation=1","-api","GeolocMaxDist=25","--"]+files.map { $0.url.path }
             helperLaunches+=1
             let result=try await ProcessRunner().run(executable:paths.perl,arguments:paths.exifArguments(args),environment:paths.environment,timeout:60)
             let documents=try MetadataDecoder().decodeBatch(result.stdout,expectedURLs:files.map(\.url))

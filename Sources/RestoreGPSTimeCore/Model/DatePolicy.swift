@@ -13,6 +13,7 @@ public struct DateTargets:OptionSet,Codable,Equatable,Sendable {
 }
 public struct DatePolicy:Codable,Equatable,Sendable {
     public var source:SourceChoice = .automaticCapture
+    public var automaticTimeZone:Bool?
     public var timeZoneID:String?
     public var fixedOffsetSeconds:Int?
     public var dstChoice:DSTChoice?

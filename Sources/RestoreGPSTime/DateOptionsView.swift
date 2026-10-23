@@ -3,7 +3,7 @@ import RestoreGPSTimeCore
 
 struct DateOptionsView:View {
     @ObservedObject var model:AppModel
-    private var enabled:Binding<Bool> {Binding(get:{model.request.dates != nil},set:{model.request.dates=$0 ? DatePolicy():nil})}
+    private var enabled:Binding<Bool> {Binding(get:{model.request.dates != nil},set:{var dates=DatePolicy();dates.automaticTimeZone=true;model.request.dates=$0 ? dates:nil})}
     private var policy:DatePolicy {model.request.dates ?? DatePolicy()}
     private var sourceName:String {
         switch policy.source {case .automaticCapture:return "Capture metadata";case .fileCreation:return "File creation";case .fileModification:return "File modification";case .specific:return "Specific date";case .current:return "Current time";case .filename:return "Filename pattern";case .referenceFile:return "Reference file";case .spotlight:return "Spotlight field";case .tag:return "Qualified metadata tag";case .reset:return "Reset to 1904"}
@@ -20,10 +20,18 @@ struct DateOptionsView:View {
                 })) {ForEach(sources,id:\.self) {Text($0)}}
                 sourceDetails
                 HStack {target("Creation",.creation);target("Modification",.modification);target("Capture tags",.capture)}
+                Toggle("Handle missing UTC offsets automatically",isOn:Binding(get:{policy.automaticTimeZone==true},set:{model.request.dates?.automaticTimeZone=$0}))
+                if policy.automaticTimeZone==true {
+                    Text("Use each photo’s embedded offset, then its GPS-based city time zone, then the fallback below. GPS zones are estimates; daylight saving uses the capture date.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+                    Text("Fallback time zone for this batch").font(.caption)
+                    TextField("Select once, e.g. Europe/Paris",text:Binding(get:{policy.timeZoneID ?? ""},set:{model.request.dates?.timeZoneID=$0.isEmpty ? nil:$0}))
+                }
                 DisclosureGroup("Time zone and video settings") {
                     VStack(alignment:.leading,spacing:10) {
+                        if policy.automaticTimeZone != true {
                         TextField("Camera / output zone (e.g. Europe/Paris)",text:Binding(get:{policy.timeZoneID ?? ""},set:{model.request.dates?.timeZoneID=$0.isEmpty ? nil:$0}))
                             .help("Required for offset-free capture dates. Also selects the embedded output zone for absolute date sources.")
+                        }
                         Picker("QuickTime integer dates",selection:$model.request.dates.field(\.quickTime,default:nil)) {
                             Text("Require a choice").tag(Optional<QuickTimeInterpretation>.none)
                             Text("Interpret as UTC").tag(Optional(QuickTimeInterpretation.utc))

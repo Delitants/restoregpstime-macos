@@ -30,13 +30,36 @@ public struct CaptureDateResolver {
                 }
                 let wall=WallClock(year:parsed.year,month:parsed.month,day:parsed.day,hour:parsed.hour,minute:parsed.minute,second:parsed.second,fraction:fraction,fractionalPrecision:precision,explicitOffset:offset,nanoseconds:nanoseconds)
                 let integer=tag.range(of:#"^(QuickTime|Track\d+):(CreateDate|ModifyDate|MediaCreateDate|MediaModifyDate|TrackCreateDate|TrackModifyDate)$"#,options:.regularExpression) != nil
-                let resolved=try TimezoneResolver().resolve(wall,policy:policy,quickTimeInteger:integer)
+                var effective=policy,zoneNote="",zoneWarnings=[String]()
+                if policy.automaticTimeZone==true && offset==nil && (!integer || policy.quickTime == .cameraLocal) {
+                    if let gps=Self.gpsTimeZone(document) {
+                        effective.timeZoneID=gps.identifier;effective.fixedOffsetSeconds=nil
+                        zoneNote="; GPS-based time zone estimate: "+gps.city
+                        zoneWarnings.append("Estimated time zone from a nearby city (\(String(format:"%.1f",gps.distance)) km). Check photos near time-zone borders; historical daylight-saving rules use the capture date.")
+                    } else {
+                        guard policy.timeZoneID != nil || policy.fixedOffsetSeconds != nil else {
+                            throw RestoreError(.timezoneRequired,"No UTC offset or usable GPS time zone. Select one fallback time zone for this batch.")
+                        }
+                        zoneNote="; Batch fallback time zone"
+                        zoneWarnings.append("Missing UTC offset: used the batch fallback because a usable GPS time zone was unavailable.")
+                    }
+                }
+                let resolved=try TimezoneResolver().resolve(wall,policy:effective,quickTimeInteger:integer)
                 let whole=try WallClockParser().utcBase(wall).timeIntervalSince1970-Double(resolved.offset)
                 let exact=try FileTimestamp(seconds:Int64(whole),nanoseconds:nanoseconds ?? Int32((fraction*1e9).rounded()))
-                return .init(source:tag,original:raw,instant:exact.date,offsetSeconds:resolved.offset,fractionalPrecision:precision,interpretation:resolved.interpretation,warnings:warnings,exactTimestamp:exact)
+                return .init(source:tag,original:raw,instant:exact.date,offsetSeconds:resolved.offset,fractionalPrecision:precision,interpretation:resolved.interpretation+zoneNote,warnings:warnings+zoneWarnings,exactTimestamp:exact)
             } catch let error as RestoreError where automatic && error.code == .invalidInput { warnings.append("\(tag): \(error.detail)") }
         }
         throw RestoreError(.missingMetadata,"No valid date was found for the selected source. "+warnings.joined(separator:" "))
+    }
+    private static func gpsTimeZone(_ document:MetadataDocument) -> (identifier:String,city:String,distance:Double)? {
+        guard (try? MetadataCoordinates.read(document)) != nil,
+              let zone=try? document.readValue("ExifTool:GeolocationTimeZone")?.text,
+              TimeZone(identifier:zone) != nil,
+              let distance=try? document.readValue("ExifTool:GeolocationDistance")?.double,
+              distance.isFinite,distance>=0,distance<=25 else {return nil}
+        let city=(try? document.readValue("ExifTool:GeolocationCity")?.text) ?? "nearby populated place"
+        return (zone,city,distance)
     }
     static func instant(_ date:Date,source:String,warnings:[String]=[],exactTimestamp:FileTimestamp?=nil) -> DateResolution {
         let precision=exactTimestamp?.fractionalPrecision ?? fractionalPrecision(date.timeIntervalSince1970)

@@ -6,7 +6,7 @@ struct RestoreGPSTimeApp:App {
     @StateObject private var session=AppSession()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     var body:some Scene {
-        WindowGroup("RestoreGPSTime") {
+        WindowGroup("RestoreGPSTime v\(appVersionText)") {
             Group {
                 if let model=session.model {WorkspaceView(session:session,model:model)}
                 else {
