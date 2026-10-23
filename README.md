@@ -11,6 +11,24 @@ Original native macOS utility for restoring photo/video file dates and place nam
 
 These builds are **self-signed and unnotarized**. macOS may block downloaded copies or show an unidentified-developer warning. Each release includes its ZIP, public certificate, checksums, installation notes and verification details. Apple Silicon was tested natively; Intel was tested through Rosetta on Apple Silicon. Physical Intel and macOS 13 host testing remain pending. See [installation](docs/INSTALL.md).
 
+## Screenshots
+
+**Date restoration**
+
+Preview creation and modification dates from capture metadata before saving copies.
+
+![RestoreGPSTime showing original and proposed file dates with Save copies selected](docs/images/date-restoration.jpg)
+
+**Location names and batch renaming**
+
+Look up cities and countries offline, then preview custom filenames with incremental numbers.
+
+![RestoreGPSTime previewing place-based filenames with incremental numbers](docs/images/location-renaming.jpg)
+
+Captured from RestoreGPSTime 0.1.0 using demo files with generated metadata.
+
+## Features
+
 Restore creation and modification dates from qualified EXIF/XMP/QuickTime capture metadata, explicit date sources, reference files, filenames, shifts or sequences. Resolve existing GPS coordinates to approximate city/country names offline, review distance and alternatives, correct a place manually, write qualified comments/structured metadata or rename files with collision-safe numbering.
 
 The app supports batch preview, Save Copies and recoverable in-place processing. Frozen plans retain selected settings, identities, date provenance, names and dependencies. It streams file hashing, verifies stored image/video payloads, rejects conflicting edits and retains partial reports and recovery evidence. Workflows, Services and native droplets import files for review before Apply. Finder attributes, scoped system Trash and Finder visibility are available as separate actions.
