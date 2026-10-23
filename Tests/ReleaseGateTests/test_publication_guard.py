@@ -82,6 +82,7 @@ class PublicationGuardTests(unittest.TestCase):
             (repo/'README.md').write_text('Restore dates.');self.git(repo,'add','.')
             self.git(repo,'commit','-qm','public source')
             before=self.git(repo,'rev-parse','HEAD')
+            shutil.rmtree(repo/'.githooks')
             (repo/'docs/acceptance').mkdir(parents=True);(repo/'docs/acceptance/EVIDENCE.md').write_text('private')
             self.git(repo,'add','-f','docs/acceptance/EVIDENCE.md')
             result=subprocess.run(['git','-C',str(repo),'commit','-qm','must be blocked'],capture_output=True,text=True)
