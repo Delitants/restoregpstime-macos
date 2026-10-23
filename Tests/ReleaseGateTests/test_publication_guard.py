@@ -10,11 +10,16 @@ class PublicationGuardTests(unittest.TestCase):
                  'docs/RELEASE.md','docs/REFERENCE.md','work/run/result.json',
                  'outputs/notes.txt','docs/implementation-notes.md','notes.md',
                  'Scripts/RELEASE-INFO.json','Sources/RestoreGPSTime/Resources/test-report.json',
-                 'docs/images/release-evidence.json','Tests/PrivateFixtures/photo.nef']
+                 'docs/images/release-evidence.json','Tests/PrivateFixtures/photo.nef',
+                 'Scripts/build.log','Tests/results.json','Tests/README.md',
+                 'Sources/RestoreGPSTimeCore/Resources/host-matrix.json',
+                 'Sources/RestoreGPSTimeCore/Resources/arbitrary-data.json']
         for name in private:self.assertIsNotNone(guard.source_path_error(name),name)
         public=['README.md','docs/INSTALL.md','docs/RECOVERY.md','docs/KNOWN-LIMITS.md',
                 'docs/images/preview.jpg','Sources/RestoreGPSTimeCore/Planning/PlanBuilder.swift',
                 'Scripts/collect-evidence.sh','Tests/Fixtures/manifest.json','ThirdParty/ExifTool-README.txt',
+                'Sources/RestoreGPSTimeCore/Resources/container-capabilities.json',
+                'Sources/RestoreGPSTimeCore/Resources/writable-tags.json',
                 '.github/workflows/publication.yml','.githooks/pre-push']
         for name in public:self.assertIsNone(guard.source_path_error(name),name)
     def testInternalMaterialCannotBeRenamedToUserHelp(self):
@@ -28,7 +33,10 @@ class PublicationGuardTests(unittest.TestCase):
             root=pathlib.Path(temporary)
             for entry in ['RestoreGPSTime.app/Contents/Resources/RELEASE-INFO.json',
                           'RestoreGPSTime.app/Contents/Resources/reports/test.json',
-                          '../INSTALL.md','/private-note.txt','docs/superpowers/design.md','.']:
+                          '../INSTALL.md','/private-note.txt','docs/superpowers/design.md','.',
+                          'RestoreGPSTime.app/Contents/Resources/build.log',
+                          'RestoreGPSTime.app/Contents/Resources/host-matrix.json',
+                          'RestoreGPSTime.app/Contents/Resources/results.json']:
                 archive=root/'bad.zip'
                 with zipfile.ZipFile(archive,'w') as z:z.writestr(entry,'internal report')
                 self.assertTrue(guard.zip_errors(archive),entry)

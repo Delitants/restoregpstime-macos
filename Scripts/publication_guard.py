@@ -4,12 +4,23 @@ import argparse,pathlib,re,subprocess,sys,zipfile
 
 CLEAN_BASELINE='2bdc38b9f26ee4da42d9a925941249366bb74e31'
 PUBLIC_DOCS={'README.md','CHANGELOG.md','docs/INSTALL.md','docs/RECOVERY.md','docs/KNOWN-LIMITS.md'}
-SOURCE_ROOTS={'.github','.githooks','App','Dependencies','Scripts','Sources','Tests','ThirdParty'}
+SOURCE_EXTENSIONS={'App':{'.plist','.icns','.png','.entitlements','.rgtimeworkflow'},
+                   'Scripts':{'.py','.sh','.swift'},'Sources':{'.swift'},'Tests':{'.swift','.py'}}
+DATA_FILES={'Dependencies/dependencies.lock.json','Tests/Fixtures/manifest.json',
+            'Sources/RestoreGPSTimeCore/Resources/container-capabilities.json',
+            'Sources/RestoreGPSTimeCore/Resources/writable-tags.json'}
+UPSTREAM_FILES={'ThirdParty/ExifTool-README.txt','ThirdParty/ExifTool-Upstream-LICENSE.txt',
+                'ThirdParty/NOTICES.txt','ThirdParty/Perl-Artistic.txt','ThirdParty/Perl-Copying.txt'}
+RUNTIME_JSON={'build-identity.json','runtime-identity.json','container-capabilities.json','writable-tags.json'}
+MEDIA_TYPES={'.jpg','.jpeg','.heic','.heif','.tif','.tiff','.png','.mov','.mp4','.webp','.avif',
+             '.nef','.nrw','.dng','.cr2','.cr3','.arw','.raf','.orf','.rw2','.m4v','.avi','.webm','.xmp'}
 ROOT_FILES={'.gitattributes','.gitignore','LICENSE','Package.swift'}
 PRIVATE_PARTS={'acceptance','superpowers','.superpowers','work','outputs','internal','reports',
                'test-reports','evidence','plans','privatefixtures','.codex','.agents'}
 PRIVATE_NAMES={'release-info.json','release-evidence.json','format-matrix.json',
-               'reference-actions.csv','reference-tools.csv','release.md','reference.md'}
+               'reference-actions.csv','reference-tools.csv','release.md','reference.md','host-matrix.json',
+               'attributes-and-tools.md','automatic-timezones.md','metadata-profiles.md','preview-progress.md',
+               'timestamp-precision.md','ui-checks.md','workflows-and-finder.md'}
 REPORT_NAME=re.compile(r'(?:^|[-_ .])(?:test[-_ ]?(?:report|results)|planning|implementation[-_ ]?(?:plan|notes)|qualification|evidence)(?:[-_ .]|$)',re.I)
 REPORT_TYPES={'.md','.txt','.json','.csv','.log','.pdf','.html','.yaml','.yml'}
 INTERNAL_TEXT=re.compile(r'(?im)(?:\b\d+\s+(?:(?:unit|integration|native)\s+)?tests?\s+(?:passed|failed|skipped)\b|/Users/[^\s/]+/|^\s*(?:#+\s*)?(?:implementation plan|test results|test report|verification report|acceptance evidence|qualification results|post-signing checks|source commit|reviewed source|build log)(?:\b|:))')
@@ -22,6 +33,7 @@ def internal_path_error(name):
     parts=[part.removeprefix('._').casefold() for part in path.parts]
     if any(part in PRIVATE_PARTS for part in parts):return 'local-only directory'
     if parts[-1] in PRIVATE_NAMES:return 'local-only document'
+    if path.suffix.casefold()=='.log':return 'local-only log'
     if path.suffix.casefold() in REPORT_TYPES and REPORT_NAME.search(parts[-1]):return 'internal report or planning document'
     return None
 
@@ -29,10 +41,21 @@ def source_path_error(name):
     error=internal_path_error(name)
     if error:return error
     path=pathlib.PurePosixPath(name)
-    if name in PUBLIC_DOCS or name in ROOT_FILES:return None
-    if path.parts[0] in SOURCE_ROOTS:return None
+    if name in PUBLIC_DOCS or name in ROOT_FILES or name in DATA_FILES or name in UPSTREAM_FILES:return None
+    if path.suffix.casefold() in SOURCE_EXTENSIONS.get(path.parts[0],set()):return None
+    if path.parts[:2]==('Tests','Fixtures') and path.suffix.casefold() in MEDIA_TYPES:return None
+    if path.parts[:2]==('.github','workflows') and path.suffix.casefold() in {'.yml','.yaml'}:return None
+    if name in {'.githooks/pre-commit','.githooks/pre-push'}:return None
     if path.parts[:2]==('docs','images') and path.suffix.casefold() in {'.jpg','.jpeg','.png','.gif','.webp','.svg'}:return None
     return 'not an approved public source or help path'
+
+def artifact_path_error(name):
+    error=internal_path_error(name)
+    if error:return error
+    path=pathlib.PurePosixPath(name)
+    if path.suffix.casefold()=='.json' and path.name.removeprefix('._').casefold() not in RUNTIME_JSON:
+        return 'unapproved JSON resource; keep reports local'
+    return None
 
 def public_text_errors(name,text):
     return [name+': internal planning, test details or local path in user help'] if INTERNAL_TEXT.search(text) else []
@@ -42,7 +65,7 @@ def zip_errors(archive):
     try:
         with zipfile.ZipFile(archive) as z:
             for item in z.infolist():
-                error=internal_path_error(item.filename)
+                error=artifact_path_error(item.filename)
                 if error:errors.append(item.filename+': '+error)
                 elif pathlib.PurePosixPath(item.filename).name in USER_HELP_NAMES and not item.is_dir():
                     if item.file_size>1048576:errors.append(item.filename+': help file is too large')
@@ -53,7 +76,7 @@ def zip_errors(archive):
 def release_file_errors(root,names):
     root=pathlib.Path(root);errors=[]
     for name in names:
-        error=internal_path_error(name)
+        error=artifact_path_error(name)
         if error:errors.append(name+': '+error);continue
         path=root/name
         if path.is_symlink() or not path.is_file():errors.append(name+': missing file or symlink');continue
