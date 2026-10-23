@@ -12,6 +12,8 @@ actor FakeAppBackend:AppBackend {
     var holdInspection=false,holdPreview=false
     private var inspectionGate:CheckedContinuation<Void,Never>?,previewGate:CheckedContinuation<Void,Never>?
     private var activePlan:BatchPlan?,continuation:AsyncStream<BatchEvent>.Continuation?
+    private var previewProgress:(@Sendable (PreparationProgress) async -> Void)?
+    private var inspectionProgress=[@Sendable (PreparationProgress) async -> Void]()
     init(items:[InspectedItem]) {self.items=items}
     func inspect(_ urls:[URL],options:DiscoveryOptions) async throws -> [InspectedItem] {
         inspectionStarted=true;inspectionInputs.append(urls)
@@ -20,12 +22,22 @@ actor FakeAppBackend:AppBackend {
     }
     func setExcluded(_ value:[ExcludedSource]) {excluded=value}
     func inspectDetailed(_ urls:[URL],options:DiscoveryOptions) async throws -> AppInspection {.init(items:try await inspect(urls,options:options),excluded:excluded)}
+    func inspectDetailed(_ urls:[URL],options:DiscoveryOptions,progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> AppInspection {
+        inspectionProgress.append(progress)
+        return try await inspectDetailed(urls,options:options)
+    }
+    func sendInspectionProgress(_ value:PreparationProgress,index:Int) async {await inspectionProgress[index](value)}
     func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions) async throws -> BatchPlan {
         let result=try await BatchPlanner(dependencies:.init(engineHash:"test-engine",databaseHash:"test-db",capabilityHash:"test-policy")).preview(items:items,request:request,options:options)
         previewStarted=true
         if holdPreview {await withCheckedContinuation {previewGate=$0}}
         return result
     }
+    func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions,progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> BatchPlan {
+        previewProgress=progress
+        return try await preview(items:items,request:request,options:options)
+    }
+    func sendPreviewProgress(_ value:PreparationProgress) async {await previewProgress?(value)}
     func delayInspection() {holdInspection=true;inspectionStarted=false}
     func releaseInspection() {holdInspection=false;inspectionGate?.resume();inspectionGate=nil}
     func delayPreview() {holdPreview=true;previewStarted=false}
@@ -63,6 +75,41 @@ class AppTestCase:XCTestCase {
     }
 }
 final class AppModelTests:AppTestCase {
+    @MainActor func testCancelAndReimportRejectsLateImportProgress() async throws {
+        let input=try item(),backend=FakeAppBackend(items:[input]),model=AppModel(backend:backend)
+        await backend.delayInspection()
+        let work=Task {await model.importURLs([input.snapshot.url])}
+        for _ in 0..<100 {if await backend.inspectionStarted {break};try await Task.sleep(nanoseconds:1_000_000)}
+        await backend.sendInspectionProgress(.init(stage:.metadata,completed:2,total:10),index:0)
+        XCTAssertNotNil(model.preparationProgress)
+        model.cancel();await backend.releaseInspection();await work.value
+        await model.importURLs([input.snapshot.url]);let status=model.progress
+        await backend.sendInspectionProgress(.init(stage:.metadata,completed:9,total:10),index:0)
+        XCTAssertNil(model.preparationProgress);XCTAssertEqual(model.progress,status);XCTAssertEqual(model.rows.count,1)
+    }
+    @MainActor func testCountedPreviewProgressIgnoresStaleUpdatesAfterSettingsChange() async throws {
+        let input=try item(),backend=FakeAppBackend(items:[input]),model=AppModel(backend:backend)
+        model.options.outputRoot=workspace.appendingPathComponent("Output");await model.importURLs([input.snapshot.url]);await backend.delayPreview()
+        let work=Task {await model.preview()}
+        for _ in 0..<100 {if await backend.previewStarted {break};try await Task.sleep(nanoseconds:1_000_000)}
+        let progress=PreparationProgress(stage:.fingerprinting,completed:12,total:100)
+        await backend.sendPreviewProgress(progress)
+        XCTAssertEqual(model.preparationProgress,progress);XCTAssertTrue(model.progress.contains("12 of 100"))
+        model.request.dates?.timeZoneID="Europe/Paris"
+        XCTAssertNil(model.preparationProgress)
+        await backend.sendPreviewProgress(.init(stage:.fingerprinting,completed:99,total:100))
+        XCTAssertNil(model.preparationProgress);XCTAssertEqual(model.progress,"Settings changed. Preview again.")
+        await backend.releasePreview();await work.value
+        XCTAssertFalse(model.canApply)
+    }
+    @MainActor func testBlockedReasonSummaryCountsGroupsAndClearsWithSettings() async throws {
+        let inputs=try [item("a.jpg",validDate:false),item("b.jpg",validDate:false),item("good.jpg")]
+        let model=AppModel(backend:FakeAppBackend(items:inputs));model.options.outputRoot=workspace.appendingPathComponent("Output")
+        await model.importURLs(inputs.map { $0.snapshot.url });await model.preview()
+        XCTAssertEqual(model.blockedReasons.count,1);XCTAssertEqual(model.blockedReasons.first?.groupCount,2)
+        XCTAssertTrue(model.blockedReasons.first?.reason.contains("No valid date")==true)
+        model.request.dates?.timeZoneID="UTC";XCTAssertTrue(model.blockedReasons.isEmpty)
+    }
     @MainActor func testFailedPreviewStopsBusyGuidanceAndNewSettingsClearItsIssue() async throws {
         let input=try item(),backend=FakeAppBackend(items:[input]),model=AppModel(backend:backend)
         await model.importURLs([input.snapshot.url]);await model.preview()

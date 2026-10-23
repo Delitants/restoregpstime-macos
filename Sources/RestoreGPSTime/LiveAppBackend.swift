@@ -12,22 +12,50 @@ actor LiveAppBackend:AppBackend {
     }
     func inspect(_ urls:[URL],options:DiscoveryOptions) async throws -> [InspectedItem] {try await inspectDetailed(urls,options:options).items}
     func inspectDetailed(_ urls:[URL],options:DiscoveryOptions) async throws -> AppInspection {
+        try await inspectDetailed(urls,options:options,progress:{_ in})
+    }
+    func inspectDetailed(_ urls:[URL],options:DiscoveryOptions,progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> AppInspection {
+        await progress(.init(stage:.discovering))
         let inventory=await SourceInventory().scan(urls:urls,options:options),reader=self.reader
         try Task.checkCancellation()
-        let items=try await withThrowingTaskGroup(of:InspectedItem.self,returning:[InspectedItem].self) {group in
-            for snapshot in inventory.snapshots {group.addTask {
-                try Task.checkCancellation()
-                do {return .init(snapshot:snapshot,metadata:try await reader.read(snapshot:snapshot))}
-                catch {try Task.checkCancellation();return .init(snapshot:snapshot,metadata:.init(tags:[:],diagnostics:[error.localizedDescription]))}
-            }}
-            var values=[InspectedItem]();for try await value in group {values.append(value)}
+        await progress(.init(stage:.metadata,total:inventory.snapshots.count))
+        let chunks=stride(from:0,to:inventory.snapshots.count,by:32).map {Array(inventory.snapshots[$0..<min($0+32,inventory.snapshots.count)])}
+        let items=try await withThrowingTaskGroup(of:[InspectedItem].self,returning:[InspectedItem].self) {group in
+            var next=0,values=[InspectedItem]()
+            func enqueue(_ chunk:[FileSnapshot]) {
+                group.addTask {
+                    try Task.checkCancellation()
+                    do {return try await zip(chunk,reader.readBatch(snapshots:chunk)).map {.init(snapshot:$0.0,metadata:$0.1)}}
+                    catch {
+                        // Isolate helper/JSON failures to individual files; keep good files usable.
+                        try Task.checkCancellation()
+                        var recovered=[InspectedItem]()
+                        for snapshot in chunk {
+                            try Task.checkCancellation()
+                            do {recovered.append(.init(snapshot:snapshot,metadata:try await reader.read(snapshot:snapshot)))}
+                            catch {try Task.checkCancellation();recovered.append(.init(snapshot:snapshot,metadata:.init(tags:[:],diagnostics:[error.localizedDescription])))}
+                        }
+                        return recovered
+                    }
+                }
+            }
+            while next<min(2,chunks.count) {enqueue(chunks[next]);next+=1}
+            while let completed=try await group.next() {
+                values+=completed
+                await progress(.init(stage:.metadata,completed:values.count,total:inventory.snapshots.count))
+                if next<chunks.count {enqueue(chunks[next]);next+=1}
+            }
             return values.sorted {$0.snapshot.url.path<$1.snapshot.url.path}
         }
         return .init(items:items,excluded:inventory.excluded)
     }
     func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions) async throws -> BatchPlan {
+        try await preview(items:items,request:request,options:options,progress:{_ in})
+    }
+    func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions,progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> BatchPlan {
         var resolved=items
         if request.location != nil || !request.rename.preserveOriginal {
+            await progress(.init(stage:.places,total:items.count))
             for index in resolved.indices {
                 try Task.checkCancellation()
                 let key=resolved[index].snapshot.id.physicalKey
@@ -37,10 +65,13 @@ actor LiveAppBackend:AppBackend {
                     resolved[index].placeCandidates=candidates
                     resolved[index].place=candidates?.first
                 }
+                await progress(.init(stage:.places,completed:index+1,total:items.count))
             }
         }
+        try Task.checkCancellation()
+        await progress(.init(stage:.dependencies))
         let identity=try await provider.observe()
-        return try await BatchPlanner(dependencies:identity,reader:reader).preview(items:resolved,request:request,options:options)
+        return try await BatchPlanner(dependencies:identity,reader:reader).preview(items:resolved,request:request,options:options,progress:progress)
     }
     func execute(_ plan:BatchPlan) async -> AsyncStream<BatchEvent> {lastRecoveryRoot=plan.options.recoveryRoot;return executor.execute(plan)}
     func cancel(_ id:UUID) async {await executor.cancel(batchID:id)}

@@ -6,12 +6,12 @@ public struct BatchPlanner:Sendable {
     let clock:any Clock
     let reader:MetadataReader?
     public init(dependencies:DependencyIdentity,clock:any Clock=SystemClock(),reader:MetadataReader?=nil) {self.dependencies=dependencies;self.clock=clock;self.reader=reader}
-    public func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions) async throws -> BatchPlan {
+    public func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions,progress:@escaping @Sendable (PreparationProgress) async -> Void={_ in}) async throws -> BatchPlan {
         let now=clock.now()
-        let worker=Task.detached(priority:.userInitiated) {try await build(items:items,request:request,options:options,now:now)}
+        let worker=Task.detached(priority:.userInitiated) {try await build(items:items,request:request,options:options,now:now,progress:progress)}
         return try await withTaskCancellationHandler(operation:{try await worker.value},onCancel:{worker.cancel()})
     }
-    private func build(items:[InspectedItem],request:OperationRequest,options:BatchOptions,now:Date) async throws -> BatchPlan {
+    private func build(items:[InspectedItem],request:OperationRequest,options:BatchOptions,now:Date,progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> BatchPlan {
         if let query=request.placeQuery {
             guard query.maxDistanceKM.isFinite,query.maxDistanceKM>0,query.maxDistanceKM<=20050,(1...10).contains(query.limit) else {throw RestoreError(.invalidInput,"Invalid offline lookup radius or candidate count.")}
         }
@@ -29,6 +29,7 @@ public struct BatchPlanner:Sendable {
         }
         let identityReader=FileIdentityReader(),capabilities=CapabilityRegistry()
         var resolved=[InspectedItem](),errors=[String:[String]](),dateErrors=[String:String](),fingerprints=[String:SourceFingerprint]()
+        await progress(.init(stage:.fingerprinting,total:items.count))
         for var item in items {
             try Task.checkCancellation()
             let key=item.snapshot.id.physicalKey
@@ -45,7 +46,10 @@ public struct BatchPlanner:Sendable {
                 catch {dateErrors[key]=error.localizedDescription}
             }
             resolved.append(item)
+            await progress(.init(stage:.fingerprinting,completed:resolved.count,total:items.count))
         }
+        try Task.checkCancellation()
+        await progress(.init(stage:.naming))
         let groups=try AssetGrouper().group(items:resolved,overrides:request.groups).map {group -> AssetGroup in
             guard let policy=request.dates,case .automaticCapture=policy.source,let primary=group.primary.dateResolution,group.members.count>1 else {return group}
             let members=group.members.map {member -> InspectedItem in
@@ -66,7 +70,9 @@ public struct BatchPlanner:Sendable {
         var names=[String:NameReservation]();for name in reservations {names[name.sourceKey]=name}
         var claimed=Set(reservations.map {rules.collisionKey($0.finalURL.path)})
         var planned=[PlannedGroup](),index=0
+        await progress(.init(stage:.planning,total:orderedIDs.count))
         for groupID in orderedIDs {
+            try Task.checkCancellation()
             guard let group=byGroup[groupID] else {continue}
             let excluded=group.members.contains {request.excludedSourceKeys.contains($0.snapshot.id.physicalKey)}
             var plannedItems=[PlannedItem](),groupErrors=[String]()
@@ -145,7 +151,9 @@ public struct BatchPlanner:Sendable {
             }
             planned.append(.init(id:group.id,evidence:group.evidence,items:plannedItems,eligibility:excluded ? .excluded:(groupErrors.isEmpty ? .eligible:.blocked),blockingReasons:Array(Set(groupErrors)).sorted()))
             index+=1
+            await progress(.init(stage:.planning,completed:index,total:orderedIDs.count))
         }
+        try Task.checkCancellation()
         return .init(optionsDigest:try Self.settingsDigest(request:request,options:options),frozenNow:now,dependencies:dependencies,request:request,options:options,groups:planned)
     }
     public static func settingsDigest(request:OperationRequest,options:BatchOptions) throws -> String {

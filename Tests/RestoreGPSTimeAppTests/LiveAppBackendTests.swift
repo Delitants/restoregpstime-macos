@@ -3,6 +3,25 @@ import XCTest
 @testable import RestoreGPSTimeCore
 
 final class LiveAppBackendTests:AppTestCase {
+    func testBatchedImportReportsCountsAndKeepsAFileErrorIsolated() async throws {
+        let backend=try backend(),recorder=AppPreparationRecorder()
+        var urls=[URL]()
+        for index in 0..<65 {
+            let url=workspace.appendingPathComponent("Photo-\(index).jpg")
+            if index==64 {try Data().write(to:url)}
+            else {try FileManager.default.copyItem(at:repo.appendingPathComponent("Tests/Fixtures/paris.jpg"),to:url)}
+            urls.append(url)
+        }
+        let before=try urls.map {try FileIdentityReader().fingerprint(at:$0)}
+        let result=try await backend.inspectDetailed(urls,options:DiscoveryOptions(),progress:{await recorder.append($0)})
+        XCTAssertEqual(result.items.count,65)
+        XCTAssertEqual(result.items.filter {$0.metadata.profile.identifier=="JPEG"}.count,64)
+        XCTAssertEqual(result.items.filter {!$0.metadata.diagnostics.isEmpty}.count,1)
+        let metadata=await recorder.events.filter {$0.stage == .metadata}
+        XCTAssertEqual(metadata.first?.completed,0);XCTAssertEqual(metadata.last?.completed,65)
+        XCTAssertTrue(metadata.contains {$0.completed>0 && $0.completed<65});XCTAssertTrue(metadata.allSatisfy {$0.total==65})
+        XCTAssertEqual(try urls.map {try FileIdentityReader().fingerprint(at:$0)},before)
+    }
     private var repo:URL {URL(fileURLWithPath:#filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()}
     private func backend() throws -> LiveAppBackend {
         let bundle=ProcessInfo.processInfo.environment["RESTOREGPSTIME_TEST_APP_BUNDLE"].map {URL(fileURLWithPath:$0)} ?? repo.appendingPathComponent("work/test-bundles/arm64-ui-t10a/RestoreGPSTime.app")
@@ -42,4 +61,8 @@ final class LiveAppBackendTests:AppTestCase {
         XCTAssertEqual(after.contentHash,before.contentHash);XCTAssertEqual(after.snapshot.xattrHashes,before.snapshot.xattrHashes)
         XCTAssertEqual(after.snapshot.creationDate.timeIntervalSince1970,before.snapshot.creationDate.timeIntervalSince1970,accuracy:0.000001)
     }
+}
+private actor AppPreparationRecorder {
+    var events=[PreparationProgress]()
+    func append(_ value:PreparationProgress) {events.append(value)}
 }

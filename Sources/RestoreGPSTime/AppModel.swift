@@ -6,13 +6,17 @@ struct AppInspection:Sendable {let items:[InspectedItem],excluded:[ExcludedSourc
 protocol AppBackend:Sendable {
     func inspect(_ urls:[URL],options:DiscoveryOptions) async throws -> [InspectedItem]
     func inspectDetailed(_ urls:[URL],options:DiscoveryOptions) async throws -> AppInspection
+    func inspectDetailed(_ urls:[URL],options:DiscoveryOptions,progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> AppInspection
     func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions) async throws -> BatchPlan
+    func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions,progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> BatchPlan
     func execute(_ plan:BatchPlan) async -> AsyncStream<BatchEvent>
     func cancel(_ id:UUID) async
     func restore(batchID:UUID,choice:RecoveryChoice) async throws -> RecoveryOutcome
     func setRecoveryRoot(_ root:URL?) async
 }
 extension AppBackend {
+    func inspectDetailed(_ urls:[URL],options:DiscoveryOptions,progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> AppInspection {try await inspectDetailed(urls,options:options)}
+    func preview(items:[InspectedItem],request:OperationRequest,options:BatchOptions,progress:@escaping @Sendable (PreparationProgress) async -> Void) async throws -> BatchPlan {try await preview(items:items,request:request,options:options)}
     func setRecoveryRoot(_ root:URL?) async {}
     func inspectDetailed(_ urls:[URL],options:DiscoveryOptions) async throws -> AppInspection {.init(items:try await inspect(urls,options:options),excluded:[])}
 }
@@ -24,6 +28,10 @@ struct MediaRow:Identifiable {
     var status:String
     var issue:String?=nil
 }
+struct BlockingReasonSummary:Identifiable,Equatable {
+    let reason:String,groupCount:Int
+    var id:String {reason}
+}
 @MainActor final class AppModel:ObservableObject {
     @Published var request:OperationRequest={var value=OperationRequest();value.dates=DatePolicy();return value}() {didSet {invalidatePreview()}}
     @Published var options=BatchOptions() {didSet {invalidatePreview()}}
@@ -34,6 +42,9 @@ struct MediaRow:Identifiable {
     @Published private(set) var report:BatchReport?
     @Published private(set) var issue:String?
     @Published private(set) var progress=""
+    @Published private(set) var preparationProgress:PreparationProgress?
+    @Published private(set) var blockedReasons=[BlockingReasonSummary]()
+    private var lastPreparationPublication:UInt64=0
     private let backend:any AppBackend
     private var revision=0,previewRevision:Int?
     private var items=[InspectedItem](),importedURLs=[URL]()
@@ -44,6 +55,7 @@ struct MediaRow:Identifiable {
     init(backend:any AppBackend) {self.backend=backend}
     private func invalidatePreview() {
         revision+=1;plan=nil;previewRevision=nil
+        preparationProgress=nil;blockedReasons=[]
         if phase == .planning || phase == .importing {cancelWork?();phase = .idle}
         if !isBusy {
             issue=nil
@@ -65,7 +77,7 @@ struct MediaRow:Identifiable {
         let backend=self.backend,roots=importedURLs
         var scope=discovery
         scope.excludedRoots+=[options.mode == .saveCopies ? options.outputRoot:nil,options.recoveryRoot].compactMap {$0}
-        let task=Task {try await backend.inspectDetailed(roots,options:scope)};cancelWork={task.cancel()}
+        let task=Task {[weak self] in try await backend.inspectDetailed(roots,options:scope,progress:{[weak self] value in await self?.receivePreparation(value,ticket:ticket)})};cancelWork={task.cancel()}
         do {
             let result=try await withTaskCancellationHandler(operation:{try await task.value},onCancel:{task.cancel()})
             guard ticket==revision,!task.isCancelled else {return}
@@ -74,21 +86,32 @@ struct MediaRow:Identifiable {
             rows+=result.excluded.map {.init(id:"excluded:"+$0.url.standardizedFileURL.path,url:$0.url,item:nil,status:"excluded",issue:$0.reason)}
             phase = .idle;progress="\(result.items.count) items imported; \(result.excluded.count) excluded"
         } catch {if ticket==revision {phase = task.isCancelled ? .idle:.failed;issue=task.isCancelled ? nil:error.localizedDescription;progress=task.isCancelled ? "Import cancelled.":"Import needs attention."}}
-        if ticket==revision {cancelWork=nil}
+        if ticket==revision {cancelWork=nil;preparationProgress=nil}
     }
     func preview() async {
         guard !isBusy else {return}
         guard !items.isEmpty else {issue="Add files or a folder first.";return}
-        plan=nil;previewRevision=nil;issue=nil;phase = .planning;progress="Building a preview…"
+        plan=nil;previewRevision=nil;issue=nil;blockedReasons=[];preparationProgress=nil;phase = .planning;progress="Building a preview…"
         let ticket=revision,backend=self.backend,inputs=items,request=self.request,options=self.options
-        let task=Task {try await backend.preview(items:inputs,request:request,options:options)};cancelWork={task.cancel()}
+        let task=Task {[weak self] in try await backend.preview(items:inputs,request:request,options:options,progress:{[weak self] value in await self?.receivePreparation(value,ticket:ticket)})};cancelWork={task.cancel()}
         do {
             let value=try await withTaskCancellationHandler(operation:{try await task.value},onCancel:{task.cancel()})
             guard ticket==revision,!task.isCancelled else {return}
             plan=value;previewRevision=ticket;show(value);phase = .ready
+            var counts=[String:Int]()
+            for group in value.groups where group.eligibility == .blocked {
+                for reason in Set(group.blockingReasons) {counts[reason,default:0]+=1}
+            }
+            blockedReasons=counts.map {BlockingReasonSummary(reason:$0.key,groupCount:$0.value)}.sorted {a,b in a.groupCount==b.groupCount ? a.reason<b.reason:a.groupCount>b.groupCount}
             progress="\(value.eligibleGroups.count) eligible asset groups; \(value.groups.filter {$0.eligibility == .blocked}.count) blocked"
         } catch {if ticket==revision {phase = task.isCancelled ? .idle:.failed;issue=task.isCancelled ? nil:error.localizedDescription;progress=task.isCancelled ? "Preview cancelled.":"Preview needs attention."}}
-        if ticket==revision {cancelWork=nil}
+        if ticket==revision {cancelWork=nil;preparationProgress=nil}
+    }
+    private func receivePreparation(_ value:PreparationProgress,ticket:Int) {
+        guard ticket==revision,phase == .importing || phase == .planning else {return}
+        let now=DispatchTime.now().uptimeNanoseconds
+        guard preparationProgress?.stage != value.stage || value.completed==value.total || now-lastPreparationPublication>=100_000_000 else {return}
+        preparationProgress=value;progress=value.message;lastPreparationPublication=now
     }
     private func show(_ plan:BatchPlan) {
         let known=Dictionary(uniqueKeysWithValues:items.map {($0.snapshot.id.physicalKey,$0)})
@@ -101,6 +124,7 @@ struct MediaRow:Identifiable {
     func applyPreview() async {
         guard canApply,let frozen=plan else {return}
         activePlan=frozen;plan=nil;previewRevision=nil;phase = .running;issue=nil;progress="Starting batch…"
+        blockedReasons=[];preparationProgress=nil
         var pending=[UUID:RowUpdate]()
         var lastPublication:UInt64=0,lastYield=DispatchTime.now().uptimeNanoseconds
         for await event in await backend.execute(frozen) {
@@ -143,6 +167,7 @@ struct MediaRow:Identifiable {
             Task {await backend.cancel(activePlan.id)}
         } else if phase == .importing || phase == .planning {
             cancelWork?();revision+=1;plan=nil;previewRevision=nil;phase = .idle;progress="Cancelled."
+            preparationProgress=nil;blockedReasons=[]
         }
     }
     func restore(batchID:UUID,choice:RecoveryChoice) async {

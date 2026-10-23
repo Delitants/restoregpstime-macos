@@ -11,6 +11,7 @@ struct WorkspaceView:View {
     @State private var dropTarget=false
     @State private var exportSheet=false
     @State private var includeCoordinates=false
+    @State private var blockedReasonsVisible=false
     private var utility:Bool {section?.isUtility ?? false}
     var body:some View {
         VStack(spacing:0) {
@@ -89,6 +90,19 @@ struct WorkspaceView:View {
                 HStack {Button("Cancel") {exportSheet=false}.fixedSize().keyboardShortcut(.cancelAction);Spacer();Button("Choose File…") {Task {await export()}}.fixedSize().keyboardShortcut(.defaultAction)}
             }.padding(24).frame(width:460)
         }
+        .sheet(isPresented:$blockedReasonsVisible) {
+            VStack(alignment:.leading,spacing:16) {
+                HStack {Text("Why files are blocked").font(.headline);Spacer();Button("Done") {blockedReasonsVisible=false}.fixedSize().keyboardShortcut(.cancelAction)}
+                Text("Each reason counts affected asset groups. A group can have more than one reason. Blocked groups are skipped when you apply the eligible changes.").font(.callout)
+                List(model.blockedReasons) {entry in
+                    VStack(alignment:.leading,spacing:5) {
+                        Text("\(entry.groupCount) \(entry.groupCount==1 ? "asset group":"asset groups")").font(.headline)
+                        Text(entry.reason).textSelection(.enabled)
+                    }.padding(.vertical,6)
+                }
+                Text("For dates without a UTC offset, set the camera’s time zone under Time zone and video settings. Dates with their own offset keep it. Preview again after changing settings.").font(.caption)
+            }.padding(20).frame(width:580,height:460)
+        }
     }
     private var importBar:some View {
         HStack(spacing:12) {
@@ -128,9 +142,15 @@ struct WorkspaceView:View {
     }
     private var footer:some View {
         VStack(alignment:.leading,spacing:7) {
+            if let preparation=model.preparationProgress,let total=preparation.total,total>0 {
+                ProgressView(value:Double(preparation.completed),total:Double(total)).progressViewStyle(.linear).accessibilityLabel(preparation.message)
+            }
+            if !model.blockedReasons.isEmpty {
+                Button("Review blocked reasons") {blockedReasonsVisible=true}.fixedSize()
+            }
             if let issue=model.issue {ScrollView {Text(issue).font(.callout).foregroundStyle(.orange).textSelection(.enabled).frame(maxWidth:.infinity,alignment:.leading)}.frame(maxHeight:65)}
             HStack(spacing:12) {
-                if model.isBusy {ProgressView().controlSize(.small)}
+                if model.isBusy && model.preparationProgress?.total==nil {ProgressView().controlSize(.small)}
                 Text(model.progress.isEmpty ? "Add files, choose settings, then preview.":model.progress).lineLimit(2).frame(maxWidth:.infinity,alignment:.leading)
                 if model.isBusy {Button("Cancel") {model.cancel()}.fixedSize().disabled(model.phase == .recovering || model.phase == .cancelling)}
                 if !utility {

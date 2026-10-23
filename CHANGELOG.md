@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 — self-signed preview
+
+- Counted progress for metadata reading, file-content checks and planning, with cancellation and stale-update protection.
+- Read metadata in batches of up to 32 files, with at most two helpers. Validate each response against its requested source and recover individual files after a batch failure.
+- Review blocked reasons grouped by affected asset count. Offset-free capture dates require an explicit camera time zone; existing metadata offsets retain priority.
+- Retain full source fingerprints and all pre-commit checks. File-content checking still depends on the drive and media sizes.
+
 ## 1.0.0 — unreleased
 
 Original native macOS interface; separate ARM64 and x86_64 builds targeting macOS 13.
