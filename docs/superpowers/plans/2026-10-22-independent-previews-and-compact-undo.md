@@ -69,11 +69,11 @@ Interfaces: `AppModel.preview(component:)`; existing `preview()` retained for le
 - [x] GREEN: AppModel/preferences/live backend tests and native UI close/reopen/tab switching checks.
 
 ## Task 6: Qualification and release
-- [ ] Full native regression and release-gate contract suite. Review all changes; fix demonstrated blockers with RED/GREEN evidence.
-- [ ] Native generated-media UI checks: deferred folder, independent caches, combined Apply/undo, green columns, all thumbnail sizes, persisted settings, full labels.
-- [ ] Build/sign/package arm64 and x86_64 with minOS13, pinned existing identity, all native component architecture/signature verification and archive readback.
-- [ ] Run Intel tests with explicit Rosetta XCTest runner (avoid known SwiftPM ARM discovery-helper issue).
-- [ ] Install safely, preserve prior copy in Trash, publish separate versioned previews and verify every uploaded/public archive hash. Update docs and report real-media/host limitations honestly.
+- [x] Full native regression and release-gate contract suite. Review all changes; fix demonstrated blockers with RED/GREEN evidence.
+- [x] Native generated-media UI checks: deferred folder, independent caches, combined Apply/undo, green columns, all thumbnail sizes, persisted settings, full labels.
+- [x] Build/sign/package arm64 and x86_64 with minOS13, pinned existing identity, all native component architecture/signature verification and archive readback.
+- [x] Run Intel tests with explicit Rosetta XCTest runner (avoid known SwiftPM ARM discovery-helper issue).
+- [x] Install safely, preserve prior copy in Trash, publish separate versioned previews and verify every uploaded/public archive hash. Update docs and report real-media/host limitations honestly.
 
 ## Execution ledger
 - Spec approval: user selected Approve and implement in this chat. Builder check: nothing important left.
@@ -85,3 +85,8 @@ Interfaces: `AppModel.preview(component:)`; existing `preview()` retained for le
 - Final ARM native run: 269 Core (1 intentional skip), 46 App, 3 QA; no failures. Release gate contracts: 14/14. Evidence: work/independent-preview-implementation/full-native-final.log and release-gate-tests.log.
 - Native QA: isolated app, generated JPEG/HEIC/MOV; folder-free preview, independent retained dates/names, cancelled destination picker retained previews, final combined copy Apply committed all 3, selected JPEG undo left other outputs, all thumbnail sizes, persisted Madrid fallback/metadata backup/Large size across close/reopen. Dark-mode screenshots retained. Host Go-to-Folder dialog automation later stalled; no user media was touched. Real remote batch remains unavailable.
 - Version: 0.2.0 build 4. ARM and Intel release builds passed with deployment target 13.0; package and Intel test qualification follows.
+
+- Final qualification: both architectures passed the 269 Core / 46 App / 3 QA suites with one intentional skip per architecture. Intel is Rosetta execution, not physical Intel. Fourteen release contract tests pass. Genuine GPS-bearing NRW checks passed on both signed runtimes, including compact in-place undo.
+- Release source: 9b20a07761728af8365b34907ee7ef0318532a50. Both 0.2.0 tags and main pushed without force. Seven assets per release downloaded and SHA-256 verified; public ZIP downloads verified. Both previews published.
+- Installed 0.2.0 build 4 in Applications after user closed 0.1.2, preserving the old copy in Trash. Signed app reopened; visible version, Off thumbnails and Madrid fallback read back across reopen. Light headers/controls checked; system appearance restored. No real user media was modified. Installation, qualification and publication receipts are retained in outputs/RestoreGPSTime-0.2.0 and outputs/RestoreGPSTime-0.2.0-Publication.
+- Qualification limits remain explicit: remote 1,146-file batch unavailable; physical Intel/macOS 13 and genuine HDR/auxiliary layouts not qualified. Native Go-to-Folder automation stalled during an additional optional fixture-import pass; its dialog was dismissed by quitting the empty app session, and the app reopened ready. This did not block the earlier generated Apply/undo checks or programmatic signed-runtime checks.
