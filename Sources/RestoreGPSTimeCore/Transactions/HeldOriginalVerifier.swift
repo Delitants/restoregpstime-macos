@@ -19,6 +19,7 @@ enum HeldOriginalVerifier {
         if current.snapshot.id.physicalKey==staged.snapshot.id.physicalKey {
             // The staged inode is at the source name, so an exchange occurred even
             // if the process stopped before persisting its completion/diagnostics.
+            if record.compactCleanup != nil,record.options.effectiveBackupMode != .full,let path=member.stageURL,!SecureFS.exists(path) {return}
             guard let held=member.stageURL else {throw conflict(source,"The exchanged original path is missing")}
             try require(held,member:member)
         }

@@ -4,6 +4,7 @@ public enum RecoveryPhase:String,Codable,CaseIterable,Sendable {case prepared,ba
 public enum CommitStep:String,Codable,Sendable {case pending,unlockPending,unlocked,swapPending,swapped,publishPending,published,retirePending,retired,flagsPending,complete,directoryPending}
 public struct RecoveryMember:Codable,Equatable,Sendable {
     public let item:PlannedItem
+    public var compactHash:String?
     public var backupURL:URL?
     public var backupHash:String?
     public var stageURL:URL?
@@ -23,6 +24,8 @@ public struct RecoveryRecord:Codable,Equatable,Sendable {
     public let batchID:UUID,groupID:UUID
     public let options:BatchOptions
     public let createdAt:Date
+    /// Present only after the whole group commit is durable. Cleanup is retryable.
+    public var compactCleanup:Bool?
     public var phase:RecoveryPhase
     public var members:[RecoveryMember]
     public var stageDirectories=[URL]()

@@ -6,19 +6,28 @@ public struct RecoveryCoordinator:Sendable {
     let driver:any MutationDriver
     let options:RunOptions
     public init(root:URL,driver:any MutationDriver,options:RunOptions=RunOptions()) {self.root=root;self.driver=driver;self.options=options}
-    public func restore(batchID:UUID,choice:RecoveryChoice) async throws -> RecoveryOutcome {
-        let worker=Task.detached(priority:.userInitiated) {try await restoreBlocking(batchID:batchID,choice:choice)}
+    /// nil selects every group; a selected source key always includes all linked
+    /// siblings in its protected group. An empty set performs no restoration.
+    public func restore(batchID:UUID,choice:RecoveryChoice,selectedSourceKeys:Set<String>?=nil) async throws -> RecoveryOutcome {
+        let worker=Task.detached(priority:.userInitiated) {try await restoreBlocking(batchID:batchID,choice:choice,selectedSourceKeys:selectedSourceKeys)}
         return try await worker.value
     }
-    private func restoreBlocking(batchID:UUID,choice:RecoveryChoice) async throws -> RecoveryOutcome {
+    private func restoreBlocking(batchID:UUID,choice:RecoveryChoice,selectedSourceKeys:Set<String>?) async throws -> RecoveryOutcome {
         let journal=try RecoveryJournal(root:root,batchID:batchID)
         var restored=[URL](),conflicts=[String]()
         var ownRestoredPaths=[URL]()
-        var records=try journal.records().sorted {a,b in
+        var records=try journal.records().filter {record in selectedSourceKeys.map {selected in record.members.contains {selected.contains($0.item.name.sourceKey)}} ?? true}.sorted {a,b in
             let ad=a.members.allSatisfy {$0.item.source.snapshot.kind == .directory},bd=b.members.allSatisfy {$0.item.source.snapshot.kind == .directory}
             if ad != bd {return !ad}
             if ad {return a.members[0].item.source.snapshot.url.path.count>b.members[0].item.source.snapshot.url.path.count}
             return a.groupID.uuidString<b.groupID.uuidString
+        }
+        // Refuse completed No backup groups before directory-unlock preflight.
+        // Their children must never cause an otherwise disabled undo to mutate flags.
+        records.removeAll {record in
+            let unavailable=record.options.effectiveBackupMode == .none && (record.phase == .committed || record.compactCleanup != nil)
+            if unavailable {conflicts.append("No backup was selected; completed changes have no retained undo.")}
+            return unavailable
         }
         var blockedDirectories=[URL]()
         if case .originalLocations=choice {
@@ -114,10 +123,53 @@ public struct RecoveryCoordinator:Sendable {
         if record.options.mode == .saveCopies || member.item.mutation.outputKind == .xmpSidecar {return .notPublished}
         if let held=member.heldOriginalURL,SecureFS.exists(held) {return .notPublished}
         if let restore=member.restoreStageURL,SecureFS.exists(restore),record.phase == .restoring {return .notPublished}
+        if record.options.effectiveBackupMode == .metadata,record.compactCleanup != nil {
+            throw RestoreError(.conflict,"Compact undo requires the unchanged output media. The media payload is missing; the compact database cannot recreate deleted or damaged media.")
+        }
         throw RestoreError(.conflict,"An expected original/output is missing; originals remain retained for separate-folder recovery.")
     }
+    private func prepareBackup(index:Int,record:inout RecoveryRecord,journal:RecoveryJournal) throws {
+        let member=record.members[index]
+        if let existing=member.backupURL,SecureFS.exists(existing) {return}
+        if record.options.effectiveBackupMode == .full {return}
+        // Prefer the verified original inode while an interrupted commit still
+        // retains it. This also protects recovery if compact capture was damaged.
+        if record.compactCleanup != true,let held=[member.heldOriginalURL,member.stageURL].compactMap({$0}).first(where:{SecureFS.exists($0) && (try? HeldOriginalVerifier.require($0,member:member)) != nil}) {
+            record.members[index].backupURL=held;record.members[index].backupHash=member.item.source.contentHash
+            try journal.persist(record);return
+        }
+        if member.compactHash != nil {
+            let payload=try CompactBackupStore(journal:journal).payload(member,record:record)
+            guard let root=member.stageURL?.deletingLastPathComponent() else {throw RestoreError(.recoveryNeeded,"Compact staging directory is unavailable.")}
+            if !SecureFS.exists(root) {try SecureFS.privateDirectory(root)}
+            let path=root.appendingPathComponent("compact-\(CompactBackupStore.hash(Data(member.item.name.sourceKey.utf8))).original")
+            if !SecureFS.exists(path) {
+                let target=try Committer.target(member.item),before=try FileIdentityReader().fingerprint(at:target)
+                guard before.contentHash==payload.outputHash else {throw RestoreError(.conflict,"Compact undo requires the unchanged output media.")}
+                if member.item.source.snapshot.kind == .directory {
+                    let parent=try SecureFS.directory(root);defer {close(parent)}
+                    guard mkdirat(parent,path.lastPathComponent,0o700)==0 else {throw SecureFS.error("Create compact directory attributes stage")}
+                } else {
+                    guard let delta=payload.delta else {throw RestoreError(.invalidInput,"Compact byte recipe is missing.")}
+                    try delta.restore(output:target,to:path)
+                }
+                try payload.applyAttributes(to:path)
+                guard try FileIdentityReader().fingerprint(at:target)==before else {throw RestoreError(.conflict,"Output changed during compact reconstruction; originals retained.")}
+            }
+            let materialized=try FileIdentityReader().fingerprint(at:path)
+            guard materialized.contentHash==member.item.source.contentHash,SecureFS.attributesEqual(materialized.snapshot,member.item.source.snapshot,flags:member.item.source.snapshot.flags & ~UInt32(UF_IMMUTABLE)) else {throw RestoreError(.verificationFailed,"Compact reconstruction failed exact original verification.")}
+            record.members[index].backupURL=path;record.members[index].backupHash=materialized.contentHash
+            try journal.persist(record)
+        } else {
+            // Incomplete transactions retain their original inode until the whole
+            // group commits. No-backup must still recover interrupted publication.
+            guard let held=[member.heldOriginalURL,member.stageURL].compactMap({$0}).first(where:{SecureFS.exists($0) && (try? HeldOriginalVerifier.require($0,member:member)) != nil}) else {throw RestoreError(.recoveryNeeded,"The incomplete transaction's held original is unavailable.")}
+            record.members[index].backupURL=held;record.members[index].backupHash=member.item.source.contentHash
+            try journal.persist(record)
+        }
+    }
     private func verifiedBackup(_ member:RecoveryMember,journal:RecoveryJournal) throws -> SourceFingerprint {
-        guard let url=member.backupURL,BatchPlanner.isWithin(url,journal.batchDirectory.appendingPathComponent("originals")) else {throw RestoreError(.recoveryNeeded,"A verified retained original is unavailable.")}
+        guard let url=member.backupURL,(BatchPlanner.isWithin(url,journal.batchDirectory.appendingPathComponent("originals")) || (member.compactHash != nil && url==member.stageURL?.deletingLastPathComponent().appendingPathComponent("compact-\(CompactBackupStore.hash(Data(member.item.name.sourceKey.utf8))).original")) || url==member.heldOriginalURL || url==member.stageURL) else {throw RestoreError(.recoveryNeeded,"A verified retained original is unavailable.")}
         let fingerprint=try FileIdentityReader().fingerprint(at:url)
         guard fingerprint.snapshot.kind==member.item.source.snapshot.kind,fingerprint.contentHash==member.backupHash,fingerprint.contentHash==member.item.source.contentHash,fingerprint.snapshot.xattrHashes==member.item.source.snapshot.xattrHashes else {throw RestoreError(.verificationFailed,"The retained original changed; recovery stopped.")}
         return fingerprint
@@ -125,9 +177,13 @@ public struct RecoveryCoordinator:Sendable {
     func restoreGroup(_ original:RecoveryRecord,journal:RecoveryJournal) async throws -> RecoveryOutcome {
         var record=original,conflicts=[String](),restored=[URL]()
         do {
-            for member in record.members {
-                let current=try state(member,record:record)
-                if record.options.mode == .modifyInPlace && member.item.mutation.outputKind == .sourceCopy && (current == .changed || current == .notPublished) {_ = try verifiedBackup(member,journal:journal)}
+            if record.options.effectiveBackupMode == .none,(record.phase == .committed || record.compactCleanup != nil) {throw RestoreError(.unsupported,"No backup was selected; completed changes have no retained undo.")}
+            for index in record.members.indices {
+                let member=record.members[index],current=try state(member,record:record)
+                if record.options.mode == .modifyInPlace && member.item.mutation.outputKind == .sourceCopy && (current == .changed || current == .notPublished) {
+                    try prepareBackup(index:index,record:&record,journal:journal)
+                    _ = try verifiedBackup(record.members[index],journal:journal)
+                }
             }
         } catch {return .init(batchID:record.batchID,restored:[],conflicts:[error.localizedDescription])}
         record.phase = .restoring;try journal.persist(record)
@@ -228,7 +284,10 @@ public struct RecoveryCoordinator:Sendable {
                 record.members[index].restored=true;try journal.persist(record);restored.append(source)
             } catch {conflicts.append(error.localizedDescription);record.errors.append(error.localizedDescription);record.phase = .recoveryNeeded;try journal.persist(record);break}
         }
-        if conflicts.isEmpty {record.phase = .restored;try journal.persist(record)}
+        if conflicts.isEmpty {
+            do {try CompactCleanup.restored(record);record.phase = .restored;try journal.persist(record)}
+            catch {conflicts.append(error.localizedDescription);record.phase = .recoveryNeeded;record.errors.append(error.localizedDescription);try journal.persist(record)}
+        }
         return .init(batchID:record.batchID,restored:restored,conflicts:conflicts)
     }
     private func coordinated(_ url:URL,_ action:()throws->Void) throws {
@@ -261,8 +320,19 @@ public struct RecoveryCoordinator:Sendable {
             }
         }
     }
-    private func restoreSeparately(_ record:RecoveryRecord,journal:RecoveryJournal,output:URL) async throws -> RecoveryOutcome {
-        var restored=[URL](),conflicts=[String]()
+    private func restoreSeparately(_ original:RecoveryRecord,journal:RecoveryJournal,output:URL) async throws -> RecoveryOutcome {
+        var record=original,restored=[URL](),conflicts=[String]()
+        do {
+            if record.options.effectiveBackupMode == .none,(record.phase == .committed || record.compactCleanup != nil) {throw RestoreError(.unsupported,"No backup was selected; completed changes have no retained undo.")}
+            if record.options.effectiveBackupMode != .full {
+                for index in record.members.indices where record.members[index].item.mutation.outputKind == .sourceCopy {
+                    _ = try state(record.members[index],record:record)
+                    try prepareBackup(index:index,record:&record,journal:journal)
+                    _ = try verifiedBackup(record.members[index],journal:journal)
+                }
+                for member in record.members {_ = try state(member,record:record)}
+            }
+        } catch {return .init(batchID:record.batchID,restored:[],conflicts:[error.localizedDescription])}
         let base=try SecureFS.canonical(output).appendingPathComponent(record.batchID.uuidString).appendingPathComponent(record.groupID.uuidString)
         let directory=try SecureFS.directory(base,create:true);close(directory)
         for member in record.members where member.item.mutation.outputKind == .sourceCopy {
@@ -280,6 +350,9 @@ public struct RecoveryCoordinator:Sendable {
                 try SecureFS.rename(stage,target)
                 if member.item.source.snapshot.isLocked {try SecureFS.flags(target,member.item.source.snapshot.flags)}
                 restored.append(target)
+                if member.compactHash != nil,let working=member.backupURL,working.lastPathComponent.hasPrefix("compact-"),SecureFS.exists(working) {
+                    try CompactCleanup.remove(working,expected:try FileIdentityReader().fingerprint(at:working))
+                }
             } catch {conflicts.append(error.localizedDescription)}
         }
         return .init(batchID:record.batchID,restored:restored,conflicts:conflicts)

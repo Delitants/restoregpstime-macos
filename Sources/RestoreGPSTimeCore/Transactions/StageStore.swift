@@ -50,6 +50,7 @@ struct StageStore {
             let fd=open(stage.path,O_RDONLY|O_NOFOLLOW);guard fd>=0 else {throw SecureFS.error("Open verified stage")};let synced=fsync(fd);close(fd);guard synced==0 else {throw SecureFS.error("Sync verified stage")}
             record.members[index].staged=try FileIdentityReader().fingerprint(at:stage)
         }
+        try CompactBackupStore(journal:journal).capture(&record)
         record.phase = .verified;try journal.persist(record);try options.checkpoint(.persisted(.verified))
     }
 }

@@ -5,9 +5,9 @@ struct BackupStore {
         guard record.options.mode == .modifyInPlace else {return}
         let root=journal.batchDirectory.appendingPathComponent("originals/\(record.groupID.uuidString)")
         try SecureFS.privateDirectory(root)
-        let total=record.members.filter {$0.item.mutation.outputKind == .sourceCopy}.reduce(UInt64(1_048_576)) {$0 &+ $1.item.source.snapshot.id.size}
+        let total=record.members.filter {$0.item.mutation.outputKind == .sourceCopy && (record.options.effectiveBackupMode == .full || $0.item.source.snapshot.kind == .directory)}.reduce(UInt64(1_048_576)) {$0 &+ $1.item.source.snapshot.id.size}
         try SecureFS.requireSpace(at:root,bytes:total)
-        for index in record.members.indices where record.members[index].item.mutation.outputKind == .sourceCopy {
+        for index in record.members.indices where record.members[index].item.mutation.outputKind == .sourceCopy && (record.options.effectiveBackupMode == .full || record.members[index].item.source.snapshot.kind == .directory) {
             let item=record.members[index].item
             try options.checkpoint(.beforeBackup(item.name.sourceKey))
             let target=root.appendingPathComponent("\(index).original")

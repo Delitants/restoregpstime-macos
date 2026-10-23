@@ -19,7 +19,10 @@ public struct Committer:Sendable {
             guard let operation else {throw RestoreError(.io,"File coordination did not grant access.")};try operation.get()
             try options.checkpoint(.afterMember(index))
         }
-        record.phase = .committed;try journal.persist(record);try options.checkpoint(.persisted(.committed))
+        record.phase = .committed
+        if record.options.effectiveBackupMode != .full {record.compactCleanup=false}
+        try journal.persist(record);try options.checkpoint(.persisted(.committed))
+        try CompactCleanup.committed(&record,journal:journal)
         return .init(groupID:group.id,status:.committed,outputs:record.members.compactMap {$0.after?.snapshot.url},recoveryURL:journal.recordURL(groupID:group.id))
     }
     static func target(_ item:PlannedItem) throws -> URL {

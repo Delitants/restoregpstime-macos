@@ -1,5 +1,6 @@
 import Foundation
 
+public enum BackupMode:String,Codable,Sendable {case metadata,full,none}
 public enum SaveMode:String,Codable,Sendable {case saveCopies,modifyInPlace}
 public enum MetadataDestination:String,Codable,Sendable {case embedded,xmpSidecar}
 public enum FinderMutation:Codable,Equatable,Sendable {
@@ -24,6 +25,8 @@ public struct OperationRequest:Codable,Equatable,Sendable {
 }
 public struct BatchOptions:Codable,Equatable,Sendable {
     public var mode:SaveMode = .saveCopies
+    public var backupMode:BackupMode?
+    public var effectiveBackupMode:BackupMode {backupMode ?? .full}
     public var outputRoot:URL?
     public var recoveryRoot:URL?
     public var importRoots=[URL]()
