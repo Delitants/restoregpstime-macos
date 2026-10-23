@@ -11,6 +11,16 @@ Original native macOS utility for restoring photo/video file dates and place nam
 
 These builds are **self-signed and unnotarized**. macOS may block downloaded copies or show an unidentified-developer warning. Each release includes its ZIP, public certificate, checksums, installation notes and verification details. Apple Silicon was tested natively; Intel was tested through Rosetta on Apple Silicon. Physical Intel and macOS 13 host testing remain pending. See [installation](docs/INSTALL.md).
 
+### First launch
+
+If macOS says **“Apple could not verify … free of malware”**, the alert may offer **Move to Trash** and **Done**. To approve your verified download:
+
+1. Choose **Done** (or **Cancel**) to keep the app.
+2. Open **System Settings → Privacy & Security**, scroll to Security, and click **Open Anyway** for RestoreGPSTime.
+3. Confirm with **Open**, authenticating if requested.
+
+This saves an exception for the app. Recent macOS versions require this Settings step; the app cannot add an Open button to the initial warning. See [Apple’s instructions](https://support.apple.com/en-us/102445). A self-signed certificate does not provide Apple notarization. If the alert instead says **“is damaged”** or **“will damage your computer”**, report the exact message before proceeding.
+
 ## Screenshots
 
 **Date restoration**
